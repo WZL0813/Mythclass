@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mythclass Admin · 若思班级一体机管理后台</title>
+<meta name="robots" content="noindex, nofollow" />
+<link rel="stylesheet" href="./admin.css" />
+<script src="https://code.iconify.design/iconify-icon/1.0.8/iconify-icon.min.js" defer></script>
+</head>
+<body>
+<!-- 背景纹理：一层噪点，免得看着像纯色板子 -->
+<div class="grain" aria-hidden="true"></div>
+<div class="glow" aria-hidden="true"></div>
+
+<!-- 1. 未初始化 -->
+<section id="view-setup" class="auth-layer" hidden>
+  <div class="auth-card">
+    <p class="eyebrow">首次见面</p>
+    <h1>先把管理员建起来</h1>
+    <p class="hint">
+      打开服务端目录里的 <code>data/admin-setup-token.txt</code>，
+      把里面那串东西抄进来。抄完它就被销毁了。
+    </p>
+    <form id="form-setup" autocomplete="off">
+      <label>初始化令牌<input name="token" required placeholder="64 位十六进制" /></label>
+      <label>管理员账号<input name="username" value="admin" required /></label>
+      <label>新密码<input name="password" type="password" minlength="8" required placeholder="至少 8 位" /></label>
+      <label>再输一遍<input name="confirm" type="password" minlength="8" required /></label>
+      <button class="btn primary" type="submit">建好，进去</button>
+    </form>
+    <p id="setup-msg" class="msg"></p>
+  </div>
+</section>
+
+<!-- 2. 未登录 -->
+<section id="view-login" class="auth-layer" hidden>
+  <div class="auth-card">
+    <p class="eyebrow">若思班级</p>
+    <h1>管理后台登录</h1>
+    <form id="form-login" autocomplete="off">
+      <label>管理员账号<input name="username" value="admin" required /></label>
+      <label>密码<input name="password" type="password" required /></label>
+      <button class="btn primary" type="submit">进去</button>
+    </form>
+    <p id="login-msg" class="msg"></p>
+  </div>
+</section>
+
+<!-- 3. 已登录 -->
+<section id="view-app" class="app-layer" hidden>
+  <aside class="side">
+    <div class="brand">
+      <span class="dot"></span>
+      <div>
+        <strong>Mythclass</strong>
+        <small>Admin</small>
+      </div>
+    </div>
+    <nav id="nav">
+      <button class="nav-item is-active" data-tab="dashboard"><iconify-icon icon="ph:gauge"></iconify-icon>仪表盘</button>
+      <button class="nav-item" data-tab="users"><iconify-icon icon="ph:users-three"></iconify-icon>用户管理</button>
+      <button class="nav-item" data-tab="clients"><iconify-icon icon="ph:desktop-tower"></iconify-icon>客户端管理</button>
+      <button class="nav-item" data-tab="settings"><iconify-icon icon="ph:sliders-horizontal"></iconify-icon>系统设置</button>
+    </nav>
+    <p class="side-foot">不推门，也能巡课。</p>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <h2 id="tab-title">仪表盘</h2>
+      <div class="topbar-right">
+        <span id="who" class="who"></span>
+        <button id="btn-logout" class="btn ghost">退出登录</button>
+      </div>
+    </header>
+
+    <!-- 仪表盘 -->
+    <div class="tab" id="tab-dashboard">
+      <div class="stat-grid" id="stats"></div>
+      <div class="panel">
+        <h3>服务端状态</h3>
+        <div id="server-info" class="kv"></div>
+      </div>
+    </div>
+
+    <!-- 用户管理 -->
+    <div class="tab" id="tab-users" hidden>
+      <div class="toolbar">
+        <input id="user-q" placeholder="搜用户名或邮箱" />
+        <select id="user-status">
+          <option value="">全部状态</option>
+          <option value="active">正常</option>
+          <option value="banned">已封禁</option>
+        </select>
+        <button id="user-search" class="btn">筛选</button>
+        <button id="user-create" class="btn primary">主动建号</button>
+      </div>
+      <div class="panel table-wrap"><table id="user-table"></table></div>
+      <div class="pager" id="user-pager"></div>
+    </div>
+
+    <!-- 客户端管理 -->
+    <div class="tab" id="tab-clients" hidden>
+      <div class="toolbar">
+        <input id="client-q" placeholder="搜 ID、名字或归属用户" />
+        <button id="client-search" class="btn">筛选</button>
+      </div>
+      <div class="panel table-wrap"><table id="client-table"></table></div>
+      <div class="pager" id="client-pager"></div>
+    </div>
+
+    <!-- 系统设置 -->
+    <div class="tab" id="tab-settings" hidden>
+      <div class="panel">
+        <h3>注册开关</h3>
+        <p class="hint">关掉之后，教师端注册页会直接显示「注册已关闭」。</p>
+        <label class="switch">
+          <input type="checkbox" id="reg-toggle" />
+          <span>允许新用户注册</span>
+        </label>
+      </div>
+      <div class="panel">
+        <h3>改管理员密码</h3>
+        <form id="form-admin-pwd" class="inline-form">
+          <input name="oldPassword" type="password" placeholder="原密码" required />
+          <input name="newPassword" type="password" placeholder="新密码，至少 8 位" minlength="8" required />
+          <button class="btn primary" type="submit">改掉</button>
+        </form>
+      </div>
+      <div class="panel">
+        <h3>数据导出</h3>
+        <p class="hint">导出的是用户与客户端清单，不含密码哈希。</p>
+        <div class="row">
+          <button class="btn" data-export="users" data-format="json">用户 JSON</button>
+          <button class="btn" data-export="users" data-format="csv">用户 CSV</button>
+          <button class="btn" data-export="clients" data-format="json">客户端 JSON</button>
+          <button class="btn" data-export="clients" data-format="csv">客户端 CSV</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</section>
+
+<!-- 弹窗 -->
+<div id="modal" class="modal-layer" hidden>
+  <div class="modal">
+    <h3 id="modal-title">标题</h3>
+    <div id="modal-body"></div>
+    <div class="modal-foot">
+      <button class="btn ghost" id="modal-cancel">算了</button>
+      <button class="btn primary" id="modal-ok">确定</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="./admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+# 统一换行符，免得 Windows / macOS 来回改一堆假 diff
+* text=auto
+
+*.js    text eol=lf
+*.cjs   text eol=lf
+*.mjs   text eol=lf
+*.json  text eol=lf
+*.vue   text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.py    text eol=lf
+
+# Windows 脚本必须留 CRLF，不然 PowerShell 会闹脾气
+*.ps1   text eol=crlf
+
+# 二进制别动
+*.png   binary
+*.jpg   binary
+*.ico   binary
+*.db    binary

@@ -1,0 +1,184 @@
+/* Mythclass 教师端 · 全局样式
+   苔绿 + 米白 + 琥珀。背景一定有纹理，不用纯平色。 */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ink: #10160f;
+  --ink-soft: #1a231a;
+  --surface: rgba(20, 28, 20, 0.72);
+  --moss: #2f4f3e;
+  --moss-2: #3f6b52;
+  --sage: #8fa88e;
+  --cream: #f3efe3;
+  --amber: #c97b3c;
+  --danger: #b4483a;
+  --line: rgba(243, 239, 227, 0.14);
+  --text: #f3efe3;
+  --text-dim: rgba(243, 239, 227, 0.62);
+  --radius: 16px;
+}
+
+/* 浅色主题：把米白翻上来，苔绿压低 */
+[data-theme='light'] {
+  --ink: #f5f2e7;
+  --ink-soft: #ffffff;
+  --surface: rgba(255, 253, 245, 0.86);
+  --sage: #5d7a60;
+  --cream: #1d2a1e;
+  --line: rgba(29, 42, 30, 0.14);
+  --text: #1d2a1e;
+  --text-dim: rgba(29, 42, 30, 0.62);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(1100px 620px at 8% -12%, rgba(63, 107, 82, 0.5), transparent 62%),
+    radial-gradient(880px 560px at 104% 4%, rgba(201, 123, 60, 0.16), transparent 58%),
+    linear-gradient(165deg, #0c110c 0%, #121a12 58%, #0d130d 100%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+[data-theme='light'] body {
+  background:
+    radial-gradient(1100px 620px at 6% -10%, rgba(63, 107, 82, 0.24), transparent 60%),
+    radial-gradient(820px 520px at 104% 2%, rgba(201, 123, 60, 0.16), transparent 56%),
+    linear-gradient(165deg, #f7f4ea 0%, #efeadd 60%, #f4f1e6 100%);
+}
+
+/* 噪点层：谁也别想看到纯平背景 */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.055;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+#app { position: relative; z-index: 1; }
+
+a { color: var(--amber); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+h1, h2, h3 { line-height: 1.28; margin: 0; }
+
+/* ------------------------------- 通用组件 ------------------------------- */
+
+.wrap { width: min(1180px, 92vw); margin: 0 auto; }
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  backdrop-filter: blur(14px);
+  padding: 22px;
+}
+
+.glass {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--surface);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.32);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  background: rgba(243, 239, 227, 0.05);
+  color: var(--text);
+  padding: 10px 18px;
+  border-radius: 11px;
+  font-size: 14.5px;
+  cursor: pointer;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s, border-color 0.2s;
+}
+.btn:hover { background: rgba(243, 239, 227, 0.11); transform: translateY(-2px); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+.btn.primary {
+  background: linear-gradient(135deg, var(--moss-2), var(--moss));
+  border-color: transparent;
+  color: #f6fbf2;
+  font-weight: 600;
+}
+.btn.amber { background: linear-gradient(135deg, #d98d4a, var(--amber)); border-color: transparent; color: #2a1a0c; font-weight: 600; }
+.btn.ghost { background: transparent; }
+.btn.small { padding: 6px 12px; font-size: 13px; border-radius: 9px; }
+.btn.danger { border-color: rgba(180, 72, 58, 0.5); color: #eaa79b; }
+
+.field { display: grid; gap: 7px; margin-bottom: 15px; }
+.field label { font-size: 13.5px; color: var(--text-dim); }
+.field input, .field select, .field textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: rgba(12, 17, 12, 0.55);
+  color: var(--text);
+  border-radius: 11px;
+  padding: 11px 13px;
+  font-size: 14.5px;
+  outline: none;
+  transition: border-color 0.2s;
+  font-family: inherit;
+}
+[data-theme='light'] .field input,
+[data-theme='light'] .field select,
+[data-theme='light'] .field textarea { background: rgba(255, 255, 255, 0.7); }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--moss-2); }
+
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--sage);
+  margin: 0 0 10px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.pill.on { border-color: rgba(63, 107, 82, 0.75); background: rgba(63, 107, 82, 0.22); color: #bcdcc6; }
+.pill.bad { border-color: rgba(180, 72, 58, 0.55); background: rgba(180, 72, 58, 0.16); color: #eaa79b; }
+
+.dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
+.muted { color: var(--text-dim); font-size: 13.5px; }
+.mono { font-family: ui-monospace, Consolas, monospace; }
+
+/* 页面出场 */
+.reveal { animation: fadeUp 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+
+/* 滚动条 */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(143, 168, 142, 0.28); border-radius: 999px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* Element Plus 微调：默认蓝紫太 SaaS 了 */
+.el-button--primary {
+  --el-button-bg-color: #2f4f3e;
+  --el-button-border-color: #2f4f3e;
+  --el-button-hover-bg-color: #3f6b52;
+  --el-button-hover-border-color: #3f6b52;
+}
+.el-message { border-radius: 12px; }

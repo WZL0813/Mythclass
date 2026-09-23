@@ -1,0 +1,41 @@
+# 依赖
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# 构建产物
+dist/
+build/
+*.spec
+*.egg-info/
+
+# 数据库与运行时数据
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+data/
+
+# 配置与密钥（只提交 *.example.*）
+config.json
+.env
+.env.local
+*.json.bak
+
+# Cloudflare Tunnel 凭证
+server/cloudflared/*.json
+server/cloudflared/config.yml
+*.pem
+
+# 编辑器与系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*

@@ -1,0 +1,12 @@
+# 客户端依赖（Python 3.10+，Windows）
+# 装不上 pycaw 就先注释掉，音频检测会自动降级成静默模式。
+
+websocket-client>=1.7.0      # 长连接（自己实现 Engine.IO v4 帧，不额外拉 socket.io 库）
+requests>=2.31.0             # 注册 / 心跳 / 上报
+pystray>=0.19.5              # 系统托盘
+Pillow>=10.0.0               # 托盘图标绘制
+watchdog>=4.0.0              # 文件改动监控
+mss>=9.0.1                   # 屏幕捕获
+pycaw>=20240210              # Windows CoreAudio 音频会话
+comtypes>=1.4.0              # pycaw 依赖
+pywin32>=306                 # 服务/自启/进程保护

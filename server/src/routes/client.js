@@ -1,0 +1,162 @@
+'use strict';
+
+/**
+ * 客户端 API：注册 / 心跳 / 上报文件记录与音频信息
+ * 路由前缀 /api/client
+ */
+
+const express = require('express');
+const { db } = require('../db');
+const config = require('../config');
+const { clientAuth, signClientToken } = require('../middleware/auth');
+const presence = require('../sockets');
+
+const router = express.Router();
+
+/** 客户端第一次跑起来，拿一个长期凭证 */
+router.post('/register', (req, res) => {
+  const clientUid = String(req.body.clientUid || req.body.client_uid || '').trim().toUpperCase();
+  const name = String(req.body.name || '').trim() || null;
+  const os = String(req.body.os || '').slice(0, 120);
+  const version = String(req.body.version || '').slice(0, 40);
+
+  if (!/^[A-Z0-9-]{6,64}$/.test(clientUid)) {
+    return res.status(400).json({ error: 'INVALID_CLIENT_UID', message: '客户端 ID 格式不对' });
+  }
+
+  let client = db.prepare('SELECT * FROM clients WHERE client_uid = ?').get(clientUid);
+  if (!client) {
+    const info = db
+      .prepare('INSERT INTO clients (client_uid, name, os, version, last_seen, last_ip) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)')
+      .run(clientUid, name || `未命名一体机 ${clientUid.slice(-4)}`, os, version, req.ip || null);
+    client = db.prepare('SELECT * FROM clients WHERE id = ?').get(info.lastInsertRowid);
+    console.log(`[Mythclass] 新客户端注册：${clientUid} (#${client.id})`);
+  } else {
+    db.prepare('UPDATE clients SET os = ?, version = ?, last_seen = CURRENT_TIMESTAMP WHERE id = ?').run(os, version, client.id);
+    client = db.prepare('SELECT * FROM clients WHERE id = ?').get(client.id);
+  }
+
+  res.json({
+    token: signClientToken(client),
+    client: { id: client.id, clientUid: client.client_uid, name: client.name },
+    server: { official: config.officialServer, relayEnabled: config.relayEnabled },
+  });
+});
+
+router.use(clientAuth);
+
+/** 客户端拉一次自己的策略 */
+router.get('/config', (req, res) => {
+  const row = db.prepare('SELECT * FROM settings WHERE client_id = ?').get(req.client.id);
+  res.json({
+    settings: {
+      maxLogCount: row ? row.max_log_count : config.fileLogMaxCount,
+      maxLogSize: row ? row.max_log_size : config.fileLogMaxSize,
+    },
+    relayEnabled: config.relayEnabled,
+    officialServer: config.officialServer,
+  });
+});
+
+router.post('/heartbeat', (req, res) => {
+  db.prepare('UPDATE clients SET last_seen = CURRENT_TIMESTAMP, last_ip = ? WHERE id = ?').run(
+    req.clientIp || null,
+    req.client.id
+  );
+  res.json({ ok: true, t: Date.now() });
+});
+
+/** 批量上报文件改动 */
+router.post('/file-logs', (req, res) => {
+  const logs = Array.isArray(req.body.logs) ? req.body.logs : [];
+  if (logs.length === 0) return res.json({ ok: true, saved: 0 });
+
+  const insert = db.prepare(
+    'INSERT INTO file_logs (client_id, timestamp, operation, file_path, file_size) VALUES (?, ?, ?, ?, ?)'
+  );
+  const saveMany = db.transaction((items) => {
+    let n = 0;
+    for (const item of items.slice(0, 500)) {
+      const ts = String(item.timestamp || '').slice(0, 19) || new Date().toISOString().slice(0, 19).replace('T', ' ');
+      insert.run(
+        req.client.id,
+        ts,
+        String(item.operation || 'unknown').slice(0, 32),
+        String(item.filePath || item.file_path || '').slice(0, 500),
+        Number(item.fileSize || item.file_size || 0)
+      );
+      n += 1;
+    }
+    return n;
+  });
+
+  const saved = saveMany(logs);
+  trimLogs(req.client.id);
+
+  // 顺手推给正在看这台机器的老师
+  presence.sendToUser(
+    db.prepare('SELECT owner_user_id FROM clients WHERE id = ?').get(req.client.id).owner_user_id,
+    'file_log',
+    { clientId: req.client.id, logs: logs.slice(0, 50) }
+  );
+
+  res.json({ ok: true, saved });
+});
+
+/** 上报当前音频状态 */
+router.post('/audio-info', (req, res) => {
+  const items = Array.isArray(req.body.items) ? req.body.items : [req.body];
+  const insert = db.prepare(
+    'INSERT INTO audio_logs (client_id, timestamp, process_name, title, volume, state) VALUES (?, CURRENT_TIMESTAMP, ?, ?, ?, ?)'
+  );
+  const saveMany = db.transaction((list) => {
+    for (const item of list.slice(0, 20)) {
+      insert.run(
+        req.client.id,
+        String(item.processName || item.process_name || '').slice(0, 120),
+        String(item.title || '').slice(0, 200),
+        Math.max(0, Math.min(100, Number(item.volume) || 0)),
+        String(item.state || 'unknown').slice(0, 32)
+      );
+    }
+  });
+  saveMany(items);
+
+  const owner = db.prepare('SELECT owner_user_id FROM clients WHERE id = ?').get(req.client.id).owner_user_id;
+  if (owner) presence.sendToUser(owner, 'audio_info', { clientId: req.client.id, items });
+
+  res.json({ ok: true });
+});
+
+/** 命令执行结果 */
+router.post('/command-result', (req, res) => {
+  const owner = db.prepare('SELECT owner_user_id FROM clients WHERE id = ?').get(req.client.id).owner_user_id;
+  if (owner) {
+    presence.sendToUser(owner, 'command_result', {
+      clientId: req.client.id,
+      requestId: req.body.requestId || null,
+      command: req.body.command || null,
+      ok: req.body.ok !== false,
+      output: String(req.body.output || '').slice(0, 2000),
+      at: new Date().toISOString(),
+    });
+  }
+  res.json({ ok: true });
+});
+
+/** 超量清理：先按条数砍，再按占用估算砍 */
+function trimLogs(clientId) {
+  const row = db.prepare('SELECT * FROM settings WHERE client_id = ?').get(clientId);
+  const maxCount = (row && row.max_log_count) || config.fileLogMaxCount;
+
+  const total = db.prepare('SELECT COUNT(*) AS n FROM file_logs WHERE client_id = ?').get(clientId).n;
+  if (total > maxCount) {
+    db.prepare(
+      `DELETE FROM file_logs WHERE id IN (
+         SELECT id FROM file_logs WHERE client_id = ? ORDER BY timestamp ASC, id ASC LIMIT ?
+       )`
+    ).run(clientId, total - maxCount);
+  }
+}
+
+module.exports = router;

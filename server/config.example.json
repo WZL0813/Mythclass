@@ -1,0 +1,16 @@
+{
+  "port": 3000,
+  "host": "127.0.0.1",
+  "dbFile": "",
+  "jwtSecret": "换成你自己的随机字符串-至少32位",
+  "adminJwtSecret": "再换一个完全不同的随机字符串-至少32位",
+  "corsOrigins": [
+    "https://mythclass.ryokuryuneko.top",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173"
+  ],
+  "relayEnabled": true,
+  "fileLogMaxCount": 5000,
+  "fileLogMaxSize": 209715200,
+  "_说明": "复制本文件为 config.json 再改。也可以改用 .env（见 .env.example）。config.json 不要提交 Git。"
+}

@@ -1,0 +1,29 @@
+{
+  "clientUid": "",
+  "clientName": "教室一体机",
+  "servers": [
+    {
+      "name": "官方服务器（不可删除）",
+      "url": "wss://mythclassapi.ryokuryuneko.top",
+      "remark": "内置，永远保留",
+      "enabled": true,
+      "official": true
+    }
+  ],
+  "adminPassword": "admin123",
+  "requirePasswordChange": true,
+  "protectProcess": true,
+  "disableTaskManager": true,
+  "autostart": true,
+  "complianceAccepted": false,
+  "teacherIp": "",
+  "watchDirs": [
+    "C:\\Users\\Public\\Desktop",
+    "C:\\Users\\Public\\Documents"
+  ],
+  "maxLogCount": 5000,
+  "maxLogSize": 209715200,
+  "screenFps": 12,
+  "screenQuality": 60,
+  "_说明": "客户端第一次运行会把这份配置复制到 %APPDATA%\\Mythclass\\config.json，之后改那份。"
+}

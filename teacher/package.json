@@ -1,0 +1,28 @@
+{
+  "name": "mythclass-teacher",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Mythclass 若思班级一体机管理系统 - 教师端（官网介绍 + 巡课控制台）",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173"
+  },
+  "dependencies": {
+    "element-plus": "^2.7.6",
+    "pinia": "^2.1.7",
+    "socket.io-client": "^4.7.5",
+    "vue": "^3.4.31",
+    "vue-router": "^4.4.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.5",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.39",
+    "tailwindcss": "^3.4.10",
+    "vite": "^5.3.3"
+  },
+  "license": "AGPL-3.0",
+  "author": "Ryokuryuneko"
+}

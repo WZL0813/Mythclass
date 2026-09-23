@@ -1,0 +1,25 @@
+# Cloudflare Tunnel 配置示例
+# 复制为 config.yml 后填入自己的 Tunnel ID 与凭证路径
+# config.yml 与 *.json 凭证都不要提交 Git
+
+tunnel: 替换成你的TunnelID
+credentials-file: C:\Users\你的用户名\.cloudflared\替换成你的TunnelID.json
+
+# 服务端只监听 localhost，外面进不来，只有隧道能敲
+originRequest:
+  connectTimeout: 30s
+  noTLSVerify: false
+  # WebSocket 必须开，屏幕流全靠它
+  disableChunkedEncoding: false
+
+ingress:
+  # 官方服务器域名 → 本机服务端
+  - hostname: mythclassapi.ryokuryuneko.top
+    service: http://localhost:3000
+    originRequest:
+      httpHostHeader: localhost:3000
+      # 屏幕中继时连接会挂很久，别让它随便断
+      keepAliveTimeout: 90s
+
+  # 兜底：其他域名一律 404
+  - service: http_status:404
