@@ -52,7 +52,10 @@ const stack = [
           <iconify-icon icon="ph:check-circle"></iconify-icon>{{ p }}
         </li>
       </ul>
-      <p class="muted">随便用，出了事自己担。许可证是 MIT，见仓库里的 LICENSE。</p>
+      <p class="muted">
+        随便用，出了事自己担。许可证是 AGPL-3.0：改过之后挂到网上给人用，
+        得把改过的源码也开源出去。详见仓库里的 LICENSE。
+      </p>
     </section>
 
     <section class="card">
