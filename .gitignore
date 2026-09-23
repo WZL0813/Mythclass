@@ -18,7 +18,10 @@ server/public/dist/
 *.db-journal
 *.sqlite
 *.sqlite3
-data/
+# 只忽略服务端的运行时目录。
+# 千万别写成光秃秃的 data/ —— 那条会匹配任何层级下叫 data 的目录，
+# 把 teacher/src/data/quotes.json 一起吃掉，EdgeOne 上构建就 ENOENT 了。
+/server/data/
 
 # 配置与密钥（只提交 *.example.*）
 config.json
