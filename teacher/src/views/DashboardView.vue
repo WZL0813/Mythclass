@@ -72,7 +72,8 @@ const commands = [
   { key: 'open_app', label: '开程序', icon: 'ph:app-window', args: ['path'] },
   { key: 'file_distribute', label: '发文件', icon: 'ph:paper-plane-tilt', args: ['url', 'path'] },
   { key: 'screen_broadcast', label: '屏幕广播', icon: 'ph:broadcast', args: ['url'] },
-  { key: 'net_ban', label: '禁止上网', icon: 'ph:prohibit', args: ['enable'] },
+  { key: 'net_ban', label: '禁止上网', icon: 'ph:prohibit', args: ['minutes'] },
+  { key: 'net_ban_lift', label: '放开上网', icon: 'ph:shield-check', args: [] },
 ];
 
 /* -------------------------------- 启动/收尾 -------------------------------- */
@@ -229,8 +230,13 @@ async function startScreen() {
   }
 }
 
-function stopScreen() {
-  if (selectedId.value) auth.sendCommand(selectedId.value, 'screen_stop');
+async function stopScreen() {
+  if (selectedId.value) {
+    const ack = await auth.sendCommand(selectedId.value, 'screen_stop');
+    if (!ack || !ack.ok) {
+      ElMessage.warning('停止命令没发出去（连接断了？），那台机器可能还在推流。');
+    }
+  }
   screenOn.value = false;
   frameSrc.value = '';
   stopStatsProbe();
@@ -410,6 +416,18 @@ async function runCommand(cmd) {
   if (cmd.key === 'lock' || cmd.key === 'unlock') {
     return sendPlain(cmd.key);
   }
+  if (cmd.key === 'net_ban_lift') {
+    try {
+      await ElMessageBox.confirm('确认放开这台机器的上网？', '确认一下', {
+        confirmButtonText: '放开',
+        cancelButtonText: '算了',
+        type: 'warning',
+      });
+    } catch (_) {
+      return;
+    }
+    return sendPlain('net_ban', { enable: false });
+  }
   if (cmd.key === 'shutdown' || cmd.key === 'reboot' || cmd.key === 'logout') {
     try {
       await ElMessageBox.confirm(`真要${cmd.label}吗？`, '确认一下', {
@@ -433,7 +451,7 @@ async function runCommand(cmd) {
       text: '要显示的话，比如：下课把窗关上',
       url: '要打开的网址，比如：https://example.com',
       path: '程序路径，比如：C:\\Windows\\notepad.exe',
-      enable: '填 true 禁网，填 false 恢复',
+      minutes: '断网多少分钟后自动放开，默认 60。填 0 表示不自动放开（要自己来解）',
     }[needs] || '',
   };
 }
@@ -453,7 +471,7 @@ async function confirmDialog() {
     open_app: { command: 'open_app', args: { path: value } },
     file_distribute: { command: 'file_distribute', args: { url: value } },
     screen_broadcast: { command: 'screen_broadcast', args: { url: value } },
-    net_ban: { command: 'net_ban', args: { enable: value === 'true' } },
+    net_ban: { command: 'net_ban', args: { enable: true, minutes: value } },
   };
   const payload = map[d.kind];
   d.open = false;

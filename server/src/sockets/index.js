@@ -22,6 +22,11 @@ const startedAt = Date.now();
 const clientSockets = new Map(); // clientId -> Set<socketId>
 const userSockets = new Map(); // userId -> Set<socketId>
 
+// userId -> { ids: Set<clientId>, timer }
+// 老师断线重连时靠它把房间恢复回来；超过 TTL 没人回来就清掉
+const userWatches = new Map();
+const WATCH_TTL_MS = 3 * 60 * 1000;
+
 /* ------------------------------ 状态查询 ------------------------------ */
 
 function isClientOnline(clientId) {
@@ -87,6 +92,40 @@ function ownsClient(userId, clientId) {
     .prepare('SELECT 1 AS ok FROM bindings WHERE user_id = ? AND client_id = ?')
     .get(userId, clientId);
   return !!row;
+}
+
+/** 这台机器现在有几个老师在看着 */
+function teacherWatcherCount(clientId) {
+  const room = io.sockets.adapter.rooms.get(`client:${clientId}`);
+  if (!room) return 0;
+  let n = 0;
+  for (const sid of room) {
+    const s = io.sockets.sockets.get(sid);
+    if (s && s.data.role === 'teacher') n += 1;
+  }
+  return n;
+}
+
+/** 让客户端开始推流。客户端自己幂等，重复发没关系 */
+function askClientToStream(clientId) {
+  if (!isClientOnline(clientId)) return false;
+  return sendToClient(clientId, 'command', {
+    command: 'screen_start',
+    args: {},
+    requestId: `auto-${Date.now()}`,
+    from: { system: true },
+  });
+}
+
+/** 没人看了就让它停。对着空气推流既费性能又难看 */
+function stopIfNobodyWatching(clientId) {
+  if (teacherWatcherCount(clientId) > 0) return false;
+  return sendToClient(clientId, 'command', {
+    command: 'screen_stop',
+    args: {},
+    requestId: `auto-stop-${Date.now()}`,
+    from: { system: true },
+  });
 }
 
 function touchClient(clientId, ip) {
@@ -217,6 +256,23 @@ function bindTeacher(socket) {
     if (typeof ack === 'function') ack({ t: Date.now(), echo: payload || null });
   });
 
+  // 断线重连：把之前在看的那几台恢复回来（短时间内有效）
+  const remembered = userWatches.get(userId);
+  if (remembered) {
+    if (remembered.timer) {
+      clearTimeout(remembered.timer);
+      remembered.timer = null;
+    }
+    for (const clientId of remembered.ids) {
+      if (!ownsClient(userId, clientId)) continue;
+      socket.join(`client:${clientId}`);
+      askClientToStream(clientId);
+    }
+    if (remembered.ids.size > 0) {
+      socket.emit('watch:restored', { clientIds: [...remembered.ids] });
+    }
+  }
+
   // 已绑定客户端的在线状态，连上就推一遍
   const bound = db.prepare('SELECT client_id FROM bindings WHERE user_id = ?').all(userId);
   socket.emit('client:presence', {
@@ -231,11 +287,24 @@ function bindTeacher(socket) {
     }
     socket.join(`client:${id}`);
     touchClient(id, null);
+
+    // 记住，断线重连要自动回来
+    if (!userWatches.has(userId)) userWatches.set(userId, { ids: new Set(), timer: null });
+    userWatches.get(userId).ids.add(id);
+
+    // 有人在看就开流：这样「重新打开页面」不会出现没人点却已经在监控的怪状态
+    askClientToStream(id);
+
     if (typeof ack === 'function') ack({ ok: true, online: isClientOnline(id) });
   });
 
   socket.on('unwatch', ({ clientId } = {}) => {
-    socket.leave(`client:${Number(clientId)}`);
+    const id = Number(clientId);
+    socket.leave(`client:${id}`);
+    const watched = userWatches.get(userId);
+    if (watched) watched.ids.delete(id);
+    // 稍微等一下再判断：老师可能只是切个页面马上回来
+    setTimeout(() => stopIfNobodyWatching(id), 800);
   });
 
   // 老师 → 客户端
@@ -266,6 +335,20 @@ function bindTeacher(socket) {
     if (set) {
       set.delete(socket.id);
       if (set.size === 0) userSockets.delete(userId);
+    }
+
+    const watched = userWatches.get(userId);
+    if (!watched) return;
+
+    // 这条连接已经离开房间了，看看还有没有别人在看
+    for (const id of watched.ids) stopIfNobodyWatching(id);
+
+    // 先别清记忆：短时间内重连要能恢复。超时了再清。
+    if (!watched.timer) {
+      watched.timer = setTimeout(() => {
+        for (const id of watched.ids) stopIfNobodyWatching(id);
+        userWatches.delete(userId);
+      }, WATCH_TTL_MS);
     }
   });
 }
