@@ -8,6 +8,12 @@ const routes = [
   { path: '/docs', name: 'docs', component: () => import('@/views/DocsView.vue'), meta: { title: '文档 · Mythclass' } },
   { path: '/about', name: 'about', component: () => import('@/views/AboutView.vue'), meta: { title: '关于 · Mythclass' } },
   {
+    path: '/account',
+    name: 'account',
+    component: () => import('@/views/AccountView.vue'),
+    meta: { title: '账号设置 · 若思班级', requiresAuth: true },
+  },
+  {
     path: '/dashboard',
     name: 'dashboard',
     component: () => import('@/views/DashboardView.vue'),

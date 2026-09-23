@@ -72,8 +72,8 @@ function logout() {
             <div v-if="menuOpen" class="menu">
               <p class="who">{{ auth.displayName }}</p>
               <button @click="go('/dashboard')">控制台</button>
-              <button @click="go('/dashboard')">账号设置</button>
-              <button class="danger" @click="logout">退出登录</button>
+              <button @click="go('/account')">账号设置</button>
+              <button @click="logout">退出登录</button>
             </div>
           </div>
         </template>
