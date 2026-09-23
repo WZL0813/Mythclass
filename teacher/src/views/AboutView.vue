@@ -29,12 +29,11 @@ const stack = [
       <section class="card">
         <h2>名字是这么来的</h2>
         <ul class="plain">
-          <li><b>Ryokuryuneko</b> —— 开发者 / 工作室，中文叫绿龙猫工作室。</li>
+          <li><b>Ryokuryuneko</b> —— 开发者 / 工作室。</li>
           <li><b>Mythclass</b> —— Myth + Class。</li>
           <li><b>若思</b> —— 取 Ryo 的音「若」，配上 Myth 的「思」。</li>
           <li><b>班级一体机</b> —— 就是教室里那台大屏。</li>
         </ul>
-        <p class="muted">龙猫只做吉祥物，不做产品名，免得惹商标麻烦。</p>
       </section>
 
       <section class="card">
