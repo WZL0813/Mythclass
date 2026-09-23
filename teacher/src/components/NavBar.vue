@@ -11,16 +11,25 @@ const router = useRouter();
 const auth = useAuthStore();
 const menuOpen = ref(false);
 
-const links = [
-  { label: '首页', to: '/' },
-  { label: '功能', to: '/#features' },
-  { label: '文档', to: '/docs' },
-  { label: '关于', to: '/about' },
-];
-
 // 有 token 就算已登录。
 // 之前还要求 user 存在，导致「带着 token 刷新首页」时导航栏又退回未登录的样子。
 const loggedIn = computed(() => auth.isLoggedIn);
+
+// 没登录看官网那一套；登录了就是干活的三个入口
+const links = computed(() =>
+  loggedIn.value
+    ? [
+        { label: '首页', to: '/' },
+        { label: '控制台', to: '/dashboard' },
+        { label: '账号设置', to: '/account' },
+      ]
+    : [
+        { label: '首页', to: '/' },
+        { label: '功能', to: '/#features' },
+        { label: '文档', to: '/docs' },
+        { label: '关于', to: '/about' },
+      ]
+);
 
 function go(to) {
   menuOpen.value = false;
@@ -52,7 +61,7 @@ function logout() {
 
       <nav class="links">
         <button v-for="l in links" :key="l.to" @click="go(l.to)">{{ l.label }}</button>
-        <a href="https://github.com/WZL0813/Mythclass" target="_blank" rel="noreferrer">GitHub</a>
+        <a v-if="!loggedIn" href="https://github.com/WZL0813/Mythclass" target="_blank" rel="noreferrer">GitHub</a>
       </nav>
 
       <div class="right">
@@ -66,7 +75,6 @@ function logout() {
         </template>
 
         <template v-else>
-          <button class="btn small primary" @click="go('/dashboard')">进入控制台</button>
           <div class="avatar-wrap">
             <button class="avatar" @click="menuOpen = !menuOpen">{{ auth.displayName.slice(0, 1).toUpperCase() }}</button>
             <div v-if="menuOpen" class="menu">
