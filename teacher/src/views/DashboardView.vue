@@ -21,6 +21,10 @@ const scale = ref(1);
 const controlMode = ref(false);
 const screenOn = ref(false);
 
+// 画面通道：idle=没在看 / relay=服务端转发 / p2p=两端直连
+const transport = ref('idle');
+const rtt = ref(null); // 到服务端的往返延迟，毫秒
+
 const audioLatest = ref(null);
 const audioLogs = ref([]);
 
@@ -39,6 +43,7 @@ const textDialog = ref({ open: false, kind: 'message', title: '', value: '', pla
 const stage = ref(null); // 屏幕舞台 DOM
 
 let lastFrameAt = 0;
+let statsTimer = null;
 let lastMoveSent = 0;
 let movePending = null;
 
@@ -91,6 +96,9 @@ onMounted(async () => {
   auth.openSocket({
     onFrame: (payload) => {
       if (!payload || payload.clientId !== selectedId.value) return;
+      // 帧从哪条路来的，指示器就显示哪条。
+      // 现在服务端转发过来的帧不带 via；将来真做 P2P 会带 via: 'p2p'
+      transport.value = payload.via === 'p2p' ? 'p2p' : 'relay';
       if (payload.data) frameSrc.value = payload.data;
       if (payload.width) frameSize.value = `${payload.width}×${payload.height}`;
 
@@ -123,6 +131,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  stopStatsProbe();
   if (selectedId.value && screenOn.value) auth.sendCommand(selectedId.value, 'screen_stop');
   auth.unwatchClient(selectedId.value);
 });
@@ -155,11 +164,66 @@ function selectClient(client) {
   if (tab.value === 'screen') startScreen();
 }
 
+const transportLabel = computed(() => {
+  if (transport.value === 'relay') return '服务端中继';
+  if (transport.value === 'p2p') return 'P2P 直连';
+  return '未在传输';
+});
+
+const transportHint = computed(() =>
+  transport.value === 'p2p'
+    ? '画面由客户端直连过来，不占服务端带宽'
+    : '画面经服务端转发（中继）。P2P 直连需要两端都实现 WebRTC，当前版本尚未启用。'
+);
+
+/** 量一次到服务端的往返延迟 */
+function measureLatency() {
+  const socket = auth.socket;
+  if (!socket || !socket.connected) {
+    rtt.value = null;
+    return;
+  }
+  const started = performance.now();
+  let done = false;
+  socket.emit('probe', {}, () => {
+    done = true;
+    rtt.value = Math.round(performance.now() - started);
+  });
+  // 服务端没回执就当测不到，别一直显示旧值
+  setTimeout(() => {
+    if (!done) rtt.value = null;
+  }, 4000);
+}
+
+/** 看画面时每 5 秒量一次延迟，顺便盯一下画面是不是断了 */
+function startStatsProbe() {
+  stopStatsProbe();
+  measureLatency();
+  statsTimer = setInterval(() => {
+    measureLatency();
+    if (screenOn.value && lastFrameAt && performance.now() - lastFrameAt > 8000) {
+      transport.value = 'idle';   // 八秒没帧了，别硬撑着显示「中继中」
+      frameFps.value = 0;
+    }
+  }, 5000);
+}
+
+function stopStatsProbe() {
+  if (statsTimer) {
+    clearInterval(statsTimer);
+    statsTimer = null;
+  }
+  rtt.value = null;
+  frameFps.value = 0;
+}
+
 async function startScreen() {
   if (!selectedId.value || screenOn.value) return;
   const ack = await auth.sendCommand(selectedId.value, 'screen_start', { fps: 12, quality: 60 });
   if (ack && ack.ok) {
     screenOn.value = true;
+    transport.value = 'idle';
+    startStatsProbe();
   } else {
     ElMessage.warning('没连上，可能机器离线。');
   }
@@ -169,6 +233,8 @@ function stopScreen() {
   if (selectedId.value) auth.sendCommand(selectedId.value, 'screen_stop');
   screenOn.value = false;
   frameSrc.value = '';
+  stopStatsProbe();
+  transport.value = 'idle';
 }
 
 function switchTab(key) {
@@ -561,7 +627,18 @@ function fmtTime(t) {
               <span class="mono">{{ scale.toFixed(1) }}x</span>
             </label>
 
+            <span
+              class="pill"
+              :class="{ on: transport === 'relay' || transport === 'p2p' }"
+              :title="transportHint"
+            >
+              <iconify-icon
+                :icon="transport === 'p2p' ? 'ph:lightning' : transport === 'relay' ? 'ph:cloud-arrow-down' : 'ph:circle-dashed'"
+              ></iconify-icon>
+              {{ transportLabel }}
+            </span>
             <span class="mono stat">{{ frameSize || '—' }} · {{ frameFps }} fps</span>
+            <span class="mono stat">{{ rtt === null ? '延迟 —' : '延迟 ' + rtt + ' ms' }}</span>
           </div>
 
           <div
@@ -579,7 +656,7 @@ function fmtTime(t) {
             <div v-else class="stage-empty">
               <iconify-icon icon="ph:monitor-play"></iconify-icon>
               <p>{{ selectedOnline ? '点「开始看」拉画面。' : '机器离线，等它上线。' }}</p>
-              <p class="muted tiny">画面经服务端中继，局域网内会走 P2P 直连。</p>
+              <p class="muted tiny">画面经服务端中继。P2P 直连需要两端都实现 WebRTC，当前版本还没做。</p>
             </div>
           </div>
 

@@ -4,6 +4,10 @@ import { api, tokenStore, connectSocket, disconnectSocket } from '@/api';
 /** 登录态 + 客户端列表 */
 export const useAuthStore = defineStore('auth', {
   state: () => ({
+    // token 必须放 state 里。
+    // 之前 isLoggedIn 直接读 localStorage，而 Pinia 的 getter 只跟着响应式数据重新计算——
+    // 没有任何响应式依赖时它算一次就永久缓存，于是登录后导航栏还是「未登录」的样子。
+    token: tokenStore.get(),
     user: null,
     clients: [],
     socket: null,
@@ -12,21 +16,28 @@ export const useAuthStore = defineStore('auth', {
   }),
 
   getters: {
-    isLoggedIn: () => !!tokenStore.get(),
+    isLoggedIn: (s) => !!s.token,
+    /** 显示用的名字。还没拿到用户信息时也别显示空白 */
+    displayName: (s) => (s.user && s.user.username) || '教师',
     onlineCount: (s) => s.clients.filter((c) => s.presence[c.id]).length,
   },
 
   actions: {
+    setToken(token) {
+      this.token = token || '';
+      tokenStore.set(this.token);
+    },
+
     async login(payload) {
       const data = await api.login(payload);
-      tokenStore.set(data.token);
+      this.setToken(data.token);
       this.user = data.user;
       return data.user;
     },
 
     async register(payload) {
       const data = await api.register(payload);
-      tokenStore.set(data.token);
+      this.setToken(data.token);
       this.user = data.user;
       return data.user;
     },
@@ -35,6 +46,17 @@ export const useAuthStore = defineStore('auth', {
       const data = await api.me();
       this.user = data.user;
       return data.user;
+    },
+
+    /** 带着 token 刷新页面时，把用户信息补回来；token 失效就清掉 */
+    async restore() {
+      if (!this.token) return null;
+      try {
+        return await this.fetchMe();
+      } catch (_) {
+        this.logout();
+        return null;
+      }
     },
 
     async fetchClients() {
@@ -111,6 +133,7 @@ export const useAuthStore = defineStore('auth', {
     },
 
     logout() {
+      this.token = '';
       tokenStore.clear();
       disconnectSocket();
       this.socket = null;

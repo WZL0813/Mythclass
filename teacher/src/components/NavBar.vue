@@ -18,7 +18,9 @@ const links = [
   { label: '关于', to: '/about' },
 ];
 
-const loggedIn = computed(() => auth.isLoggedIn && !!auth.user);
+// 有 token 就算已登录。
+// 之前还要求 user 存在，导致「带着 token 刷新首页」时导航栏又退回未登录的样子。
+const loggedIn = computed(() => auth.isLoggedIn);
 
 function go(to) {
   menuOpen.value = false;
@@ -66,9 +68,9 @@ function logout() {
         <template v-else>
           <button class="btn small primary" @click="go('/dashboard')">进入控制台</button>
           <div class="avatar-wrap">
-            <button class="avatar" @click="menuOpen = !menuOpen">{{ auth.user.username.slice(0, 1).toUpperCase() }}</button>
+            <button class="avatar" @click="menuOpen = !menuOpen">{{ auth.displayName.slice(0, 1).toUpperCase() }}</button>
             <div v-if="menuOpen" class="menu">
-              <p class="who">{{ auth.user.username }}</p>
+              <p class="who">{{ auth.displayName }}</p>
               <button @click="go('/dashboard')">控制台</button>
               <button @click="go('/dashboard')">账号设置</button>
               <button class="danger" @click="logout">退出登录</button>

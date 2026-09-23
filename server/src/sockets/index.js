@@ -212,6 +212,11 @@ function bindTeacher(socket) {
   userSockets.get(userId).add(socket.id);
   socket.join(`user:${userId}`);
 
+  // 纯回执：老师用来量到服务端的往返延迟，不碰数据库
+  socket.on('probe', (payload, ack) => {
+    if (typeof ack === 'function') ack({ t: Date.now(), echo: payload || null });
+  });
+
   // 已绑定客户端的在线状态，连上就推一遍
   const bound = db.prepare('SELECT client_id FROM bindings WHERE user_id = ?').all(userId);
   socket.emit('client:presence', {

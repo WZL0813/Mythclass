@@ -3,8 +3,10 @@ import { onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import NavBar from '@/components/NavBar.vue';
 import FooterBar from '@/components/FooterBar.vue';
+import { useAuthStore } from '@/stores/auth';
 
 const route = useRoute();
+const auth = useAuthStore();
 const theme = ref(localStorage.getItem('mythclass.theme') || 'dark');
 
 function applyTheme(value) {
@@ -14,7 +16,12 @@ function applyTheme(value) {
   localStorage.setItem('mythclass.theme', value);
 }
 
-onMounted(() => applyTheme(theme.value));
+onMounted(async () => {
+  applyTheme(theme.value);
+  // 带着 token 刷新任何页面时，把用户信息补回来；
+  // 不然导航栏只知道「有 token」，头像那里就是空的
+  await auth.restore();
+});
 </script>
 
 <template>
