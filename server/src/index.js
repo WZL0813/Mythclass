@@ -18,23 +18,28 @@ const setupToken = require('./admin/setupToken');
 const authRoutes = require('./routes/auth');
 const clientRoutes = require('./routes/client');
 const adminRoutes = require('./routes/admin');
+const { originAllowed, describeOrigin } = require('./middleware/origin');
 
 const app = express();
 
 app.disable('x-powered-by');
 app.set('trust proxy', true); // 前面站着 Cloudflare
 
-app.use(
-  cors({
-    origin(origin, callback) {
-      // 没有 Origin 的是脚本 / 客户端请求，放行
-      if (!origin) return callback(null, true);
-      if (config.corsOrigins.includes('*') || config.corsOrigins.includes(origin)) return callback(null, true);
-      return callback(new Error(`CORS 拒绝：${origin}`));
-    },
-    credentials: true,
-  })
-);
+// 跨域闸门：白名单 + 同源
+// 同源这条不能少：Admin 后台可能从 localhost / 局域网 IP / 隧道域名打开，
+// 而浏览器对 POST 一定带 Origin，只认白名单会把这种访问全拒掉。
+app.use((req, res, next) => {
+  if (originAllowed(req)) return next();
+
+  console.warn(`[Mythclass] 拦下跨域请求：${describeOrigin(req)} → ${req.method} ${req.originalUrl}`);
+  return res.status(403).json({
+    error: 'CORS_DENIED',
+    message: `跨域被拒：${describeOrigin(req)}`,
+    hint: '要放行就把它加进 .env 的 CORS_ORIGINS（逗号分隔）。同源访问本来就会放行，不该走到这里。',
+  });
+});
+
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '4mb' }));
 app.use(express.urlencoded({ extended: false }));
 
@@ -84,11 +89,10 @@ app.use('/api/admin', adminRoutes);
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'NOT_FOUND', message: '接口不存在' }));
 
-// 统一错误出口（CORS 拒绝也走这里）
+// 统一错误出口
 app.use((err, req, res, _next) => {
   console.error('[Mythclass] 请求出错：', err.message);
-  const status = /CORS/.test(err.message) ? 403 : 500;
-  res.status(status).json({ error: status === 403 ? 'CORS_DENIED' : 'SERVER_ERROR', message: err.message });
+  res.status(500).json({ error: 'SERVER_ERROR', message: err.message });
 });
 
 /* --------------------------------- 启动 --------------------------------- */

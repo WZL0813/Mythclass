@@ -14,6 +14,7 @@ const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const config = require('../config');
 const { db } = require('../db');
+const { originAllowed, describeOrigin } = require('../middleware/origin');
 
 let io = null;
 const startedAt = Date.now();
@@ -107,7 +108,13 @@ function notifyPresence(clientId, online) {
 function init(server) {
   io = new Server(server, {
     path: '/socket.io',
-    cors: { origin: config.corsOrigins, credentials: true },
+    // 同源与白名单都放行。真正的门是握手时那张 JWT，不是来源
+    cors: { origin: true, credentials: true },
+    allowRequest: (req, callback) => {
+      const ok = originAllowed(req);
+      if (!ok) console.warn(`[Mythclass] 拦下跨域的 WebSocket 握手：${describeOrigin(req)}`);
+      callback(null, ok);
+    },
     maxHttpBufferSize: 8 * 1024 * 1024, // 屏幕帧能大一点
     pingInterval: 25000,
     pingTimeout: 60000,
