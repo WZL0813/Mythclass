@@ -95,21 +95,7 @@ onMounted(async () => {
   }
 
   auth.openSocket({
-    onFrame: (payload) => {
-      if (!payload || payload.clientId !== selectedId.value) return;
-      // 帧从哪条路来的，指示器就显示哪条。
-      // 现在服务端转发过来的帧不带 via；将来真做 P2P 会带 via: 'p2p'
-      transport.value = payload.via === 'p2p' ? 'p2p' : 'relay';
-      if (payload.data) frameSrc.value = payload.data;
-      if (payload.width) frameSize.value = `${payload.width}×${payload.height}`;
-
-      const now = performance.now();
-      if (lastFrameAt) {
-        const gap = now - lastFrameAt;
-        if (gap > 0) frameFps.value = Math.round(Math.min(1000 / gap, 60));
-      }
-      lastFrameAt = now;
-    },
+    onFrame: (payload) => applyFrame(payload, false),
     onAudio: (payload) => {
       if (!payload || payload.clientId !== selectedId.value) return;
       const first = (payload.items || [])[0];
@@ -129,10 +115,14 @@ onMounted(async () => {
       );
     },
   });
+
+  // P2P 的 answer 会从这条连接回来
+  if (auth.socket) auth.socket.on('answer', onP2PAnswer);
 });
 
 onBeforeUnmount(() => {
   stopStatsProbe();
+  closeP2P();
   if (selectedId.value && screenOn.value) auth.sendCommand(selectedId.value, 'screen_stop');
   auth.unwatchClient(selectedId.value);
 });
@@ -165,6 +155,97 @@ function selectClient(client) {
   if (tab.value === 'screen') startScreen();
 }
 
+// ------------------------------ P2P 直连 ------------------------------
+// 只用一个数据通道传 JPEG 帧，不搞视频轨道：省掉编解码器，渲染代码也不用改。
+// 用非 trickle ICE（等候选收齐再发完整 SDP），省掉单独的 ice 交换。
+let p2p = null;
+
+function closeP2P() {
+  if (!p2p) return;
+  try {
+    if (p2p.channel) p2p.channel.close();
+    if (p2p.pc) p2p.pc.close();
+  } catch (_) {
+    /* 关不上就算了 */
+  }
+  p2p = null;
+}
+
+async function startP2P(clientId) {
+  closeP2P();
+
+  const socket = auth.socket;
+  if (!socket || !socket.connected || typeof RTCPeerConnection === 'undefined') {
+    return; // 环境不支持就老老实实走中继
+  }
+
+  const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }] });
+  const channel = pc.createDataChannel('mythclass', { ordered: false, maxRetransmits: 0 });
+  const session = { pc, channel, clientId, sent: false, timer: null };
+  p2p = session;
+
+  channel.onopen = () => {
+    if (p2p === session) transport.value = 'p2p';
+  };
+  channel.onclose = () => {
+    if (p2p === session && transport.value === 'p2p') transport.value = 'relay';
+  };
+  channel.onmessage = (event) => {
+    if (p2p !== session) return;
+    let payload = null;
+    try {
+      payload = JSON.parse(event.data);
+    } catch (_) {
+      return;
+    }
+    applyFrame(payload, true);
+  };
+
+  const sendOffer = () => {
+    if (session.sent || p2p !== session || !pc.localDescription) return;
+    session.sent = true;
+    socket.emit('offer', {
+      clientId,
+      sdp: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
+    });
+  };
+  pc.onicegatheringstatechange = () => {
+    if (pc.iceGatheringState === 'complete') sendOffer();
+  };
+
+  try {
+    await pc.setLocalDescription(await pc.createOffer());
+  } catch (_) {
+    closeP2P();
+    return;
+  }
+  // 候选收不齐也得发出去，别一直干等
+  session.timer = setTimeout(sendOffer, 2500);
+}
+
+function onP2PAnswer(payload) {
+  if (!p2p || !payload || !payload.sdp) return;
+  if (payload.clientId && payload.clientId !== p2p.clientId) return;
+  p2p.pc.setRemoteDescription(payload.sdp).catch(() => closeP2P());
+}
+
+/** 一帧画面。fromP2P 表示它是从直连通道来的 */
+function applyFrame(payload, fromP2P) {
+  if (!payload || !payload.data) return;
+  if (!fromP2P && payload.clientId !== selectedId.value) return;
+
+  transport.value = fromP2P ? 'p2p' : 'relay';
+  frameSrc.value = payload.data;
+  if (payload.width) frameSize.value = `${payload.width}×${payload.height}`;
+
+  const now = performance.now();
+  if (lastFrameAt) {
+    const gap = now - lastFrameAt;
+    if (gap > 0) frameFps.value = Math.round(Math.min(1000 / gap, 60));
+  }
+  lastFrameAt = now;
+}
+
 const transportLabel = computed(() => {
   if (transport.value === 'relay') return '服务端中继';
   if (transport.value === 'p2p') return 'P2P 直连';
@@ -173,8 +254,8 @@ const transportLabel = computed(() => {
 
 const transportHint = computed(() =>
   transport.value === 'p2p'
-    ? '画面由客户端直连过来，不占服务端带宽'
-    : '画面经服务端转发（中继）。P2P 直连需要两端都实现 WebRTC，当前版本尚未启用。'
+    ? '画面由客户端直连过来，不经服务端，不占它的带宽'
+    : '画面经服务端转发（中继）。每次「开始看」都会先试 P2P 直连，成了这里会变成「P2P 直连」。'
 );
 
 /** 量一次到服务端的往返延迟 */
@@ -225,6 +306,7 @@ async function startScreen() {
     screenOn.value = true;
     transport.value = 'idle';
     startStatsProbe();
+    startP2P(selectedId.value); // 直连能成就不用占服务端带宽
   } else {
     ElMessage.warning('没连上，可能机器离线。');
   }
@@ -240,6 +322,7 @@ async function stopScreen() {
   screenOn.value = false;
   frameSrc.value = '';
   stopStatsProbe();
+  closeP2P();
   transport.value = 'idle';
 }
 
@@ -674,7 +757,7 @@ function fmtTime(t) {
             <div v-else class="stage-empty">
               <iconify-icon icon="ph:monitor-play"></iconify-icon>
               <p>{{ selectedOnline ? '点「开始看」拉画面。' : '机器离线，等它上线。' }}</p>
-              <p class="muted tiny">画面经服务端中继。P2P 直连需要两端都实现 WebRTC，当前版本还没做。</p>
+              <p class="muted tiny">先试 P2P 直连，连不上自动走服务端中继。工具栏右侧会显示当前走的是哪条路。</p>
             </div>
           </div>
 
