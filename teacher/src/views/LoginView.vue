@@ -57,6 +57,7 @@ async function submit() {
 <template>
   <div class="auth-page">
     <div class="auth-card glass reveal">
+      <img class="brand-logo" src="/logo.png" alt="Mythclass" />
       <p class="eyebrow">若思班级 · 教师端</p>
       <h1>登录</h1>
       <p class="muted">账号在服务端，这儿只存 token。</p>
@@ -104,6 +105,7 @@ async function submit() {
   transform: translateX(-4%);
 }
 .auth-card h1 { font-size: 27px; margin-bottom: 8px; }
+.brand-logo { width: 78px; height: 78px; border-radius: 18px; display: block; margin-bottom: 16px; }
 form { margin-top: 22px; }
 .wide { width: 100%; justify-content: center; margin-top: 6px; }
 .err { color: #eaa79b; font-size: 13.5px; margin: 0 0 12px; }

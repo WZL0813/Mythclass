@@ -44,7 +44,7 @@ function logout() {
   <header class="nav">
     <div class="nav-inner">
       <button class="logo" @click="go('/')">
-        <span class="mark">M</span>
+        <img class="mark" src="/logo-mark.png" alt="Mythclass" />
         <span class="word">Mythclass</span>
       </button>
 
@@ -113,13 +113,9 @@ function logout() {
 .mark {
   width: 26px;
   height: 26px;
-  display: grid;
-  place-items: center;
+  display: block;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--moss-2), var(--moss));
-  color: #f4fbef;
-  font-weight: 700;
-  font-size: 15px;
+  object-fit: contain;
 }
 .word { font-weight: 700; letter-spacing: 0.02em; }
 

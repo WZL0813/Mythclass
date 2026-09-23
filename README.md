@@ -1,4 +1,4 @@
-# Mythclass 若思班级一体机管理系统
+<img src="assets/logo-mark.png" width="88" alt="Mythclass" />
 
 > 教室一体机巡课与远程管理
 > **不推门，也能巡课。**

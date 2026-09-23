@@ -220,6 +220,7 @@ function go(path) {
   animation: floaty 7s ease-in-out infinite;
 }
 .machine .bar { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; font-size: 12.5px; color: var(--sage); }
+.brand-mini { width: 18px; height: 18px; border-radius: 5px; display: block; }
 .machine .bar .pill { margin-left: auto; }
 .dot-live {
   width: 8px; height: 8px; border-radius: 50%; background: #7fc59a;

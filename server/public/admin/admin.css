@@ -151,10 +151,9 @@ code {
   background: linear-gradient(180deg, rgba(21, 30, 21, 0.75), rgba(14, 20, 14, 0.4));
 }
 .brand { display: flex; align-items: center; gap: 10px; }
-.brand .dot {
-  width: 12px; height: 12px; border-radius: 50%;
-  background: var(--amber);
-  box-shadow: 0 0 0 5px rgba(201, 123, 60, 0.18);
+.brand-logo {
+  width: 30px; height: 30px; border-radius: 9px; display: block;
+  box-shadow: 0 0 0 4px rgba(201, 123, 60, 0.14);
 }
 .brand strong { display: block; font-size: 16px; letter-spacing: 0.02em; }
 .brand small { color: var(--sage); font-size: 11.5px; letter-spacing: 0.24em; text-transform: uppercase; }
