@@ -7,9 +7,10 @@ venv/
 env/
 
 # 构建产物
+# 注意别写 build/ —— client/build/ 里放着安装脚本和 pyinstaller 配置，那是源码
 dist/
-build/
-*.spec
+teacher/dist/
+server/public/dist/
 *.egg-info/
 
 # 数据库与运行时数据

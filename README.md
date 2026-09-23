@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/license-AGPL--3.0-2F4F3E.svg)](LICENSE)
 [![Server](https://img.shields.io/badge/server-Node.js%20%2B%20SQLite-3F6B52.svg)](server/)
 [![Teacher](https://img.shields.io/badge/teacher-Vue3%20%2B%20Vite-C97B3C.svg)](teacher/)
-[![Client](https://img.shields.io/badge/client-Python%203.10%2B-6B7C5A.svg)](client/)
+[![Client](https://img.shields.io/badge/client-Python%203.10%2B-6B7C5A.svg)](https://github.com/WZL0813/Mythclass-Client)
 
 ---
 
@@ -100,11 +100,7 @@ Mythclass/
 │   ├── cloudflared/        # 隧道配置示例
 │   ├── config.example.json
 │   └── package.json
-├── client/                 # 客户端（Windows 一体机）
-│   ├── mythclass/          # Python 包
-│   ├── build/              # 自启与卸载脚本
-│   ├── config.example.json
-│   └── requirements.txt
+
 ├── teacher/                # 教师端 HTML 网页
 │   ├── src/
 │   ├── public/
@@ -115,6 +111,9 @@ Mythclass/
 ├── LICENSE
 └── .gitignore
 ```
+
+客户端（教室里那台一体机）单独一个仓库：
+[Mythclass-Client](https://github.com/WZL0813/Mythclass-Client)
 
 ---
 
@@ -144,8 +143,11 @@ npm run dev
 
 ### 3. 起客户端
 
+客户端在另一个仓库：[Mythclass-Client](https://github.com/WZL0813/Mythclass-Client)
+
 ```bash
-cd client
+git clone https://github.com/WZL0813/Mythclass-Client.git
+cd Mythclass-Client
 pip install -r requirements.txt
 python -m mythclass
 ```
@@ -162,7 +164,7 @@ python -m mythclass
 ## 文档
 
 - [部署教程：EdgeOne 与 Cloudflare Tunnel](docs/部署教程-EdgeOne与CloudflareTunnel.md)
-- [客户端安装与自启](docs/客户端安装与自启.md)
+- [客户端安装与自启](https://github.com/WZL0813/Mythclass-Client/blob/main/docs/客户端安装与自启.md)（在客户端仓库）
 - [教师端使用说明](docs/教师端使用说明.md)
 - [Admin 后台使用说明](docs/Admin后台使用说明.md)
 - [通信协议](docs/通信协议.md)
@@ -184,7 +186,7 @@ python -m mythclass
 
 1. Fork 本仓库
 2. 新建分支 `feat/你的功能`
-3. 提交前跑一遍 `npm run build`（teacher）与 `python -m compileall client/mythclass`
+3. 提交前跑一遍 `npm run build`（teacher）与 `node --check`（server）
 4. 提 PR，说清楚改了什么、为什么
 
 别提交 `config.json`、`.env`、`data/`、`*.db`、隧道凭证文件。`.gitignore` 已经拦好了。

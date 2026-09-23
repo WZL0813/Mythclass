@@ -4,7 +4,7 @@
 
 - 第一部分：服务端 + Cloudflare Tunnel
 - 第二部分：教师端（EdgeOne Pages）
-- 第三部分：客户端（教室一体机）
+- 第三部分：客户端（教室一体机，独立仓库）
 - 第四部分：Admin 后台
 
 需要准备的东西：一台能常开的电脑、一个 Cloudflare 账号、一个腾讯云账号、一个域名。
@@ -193,7 +193,8 @@ git push -u origin main
 ### 1. 打包
 
 ```bash
-cd client
+git clone https://github.com/WZL0813/Mythclass-Client.git
+cd Mythclass-Client
 pip install -r requirements.txt
 pip install pyinstaller
 pyinstaller build/mythclass.spec
@@ -203,7 +204,7 @@ pyinstaller build/mythclass.spec
 
 ### 2. 安装
 
-把 `dist/Mythclass.exe` 和 `client/build/` 一起拷到一体机上，管理员 PowerShell：
+把 `dist/Mythclass.exe` 和 `build/` 一起拷到一体机上，管理员 PowerShell：
 
 ```powershell
 cd build
