@@ -10,6 +10,7 @@ export const useAuthStore = defineStore('auth', {
     token: tokenStore.get(),
     user: null,
     clients: [],
+    watching: [], // 正在看哪几台。重连后要重新 join，不然收不到画面
     socket: null,
     socketReady: false,
     presence: {}, // clientId -> online
@@ -73,6 +74,8 @@ export const useAuthStore = defineStore('auth', {
 
       socket.on('connect', () => {
         this.socketReady = true;
+        // 重连后房间成员资格没了，得自己补回来
+        for (const clientId of this.watching) socket.emit('watch', { clientId });
       });
       socket.on('disconnect', () => {
         this.socketReady = false;
@@ -103,10 +106,12 @@ export const useAuthStore = defineStore('auth', {
     },
 
     watchClient(clientId) {
+      if (!this.watching.includes(clientId)) this.watching.push(clientId);
       if (this.socket) this.socket.emit('watch', { clientId });
     },
 
     unwatchClient(clientId) {
+      this.watching = this.watching.filter((id) => id !== clientId);
       if (this.socket) this.socket.emit('unwatch', { clientId });
     },
 
@@ -141,6 +146,7 @@ export const useAuthStore = defineStore('auth', {
       this.user = null;
       this.clients = [];
       this.presence = {};
+      this.watching = [];
     },
   },
 });

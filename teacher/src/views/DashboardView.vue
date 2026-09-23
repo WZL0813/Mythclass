@@ -118,6 +118,13 @@ onMounted(async () => {
 
   // P2P 的 answer 会从这条连接回来
   if (auth.socket) auth.socket.on('answer', onP2PAnswer);
+
+  // 断线重连后：房间由 store 补 watch，画面得我们自己再要一次
+  if (auth.socket) {
+    auth.socket.on('connect', () => {
+      if (screenOn.value && selectedId.value) startScreen(true);
+    });
+  }
 });
 
 onBeforeUnmount(() => {
@@ -299,8 +306,10 @@ function stopStatsProbe() {
   frameFps.value = 0;
 }
 
-async function startScreen() {
-  if (!selectedId.value || screenOn.value) return;
+async function startScreen(force = false) {
+  if (!selectedId.value) return;
+  // force：断线重连后即使 UI 认为已经在看，也要重新要一次画面
+  if (screenOn.value && !force) return;
   const ack = await auth.sendCommand(selectedId.value, 'screen_start', { fps: 12, quality: 60 });
   if (ack && ack.ok) {
     screenOn.value = true;

@@ -106,17 +106,6 @@ function teacherWatcherCount(clientId) {
   return n;
 }
 
-/** 让客户端开始推流。客户端自己幂等，重复发没关系 */
-function askClientToStream(clientId) {
-  if (!isClientOnline(clientId)) return false;
-  return sendToClient(clientId, 'command', {
-    command: 'screen_start',
-    args: {},
-    requestId: `auto-${Date.now()}`,
-    from: { system: true },
-  });
-}
-
 /** 没人看了就让它停。对着空气推流既费性能又难看 */
 function stopIfNobodyWatching(clientId) {
   if (teacherWatcherCount(clientId) > 0) return false;
@@ -266,7 +255,6 @@ function bindTeacher(socket) {
     for (const clientId of remembered.ids) {
       if (!ownsClient(userId, clientId)) continue;
       socket.join(`client:${clientId}`);
-      askClientToStream(clientId);
     }
     if (remembered.ids.size > 0) {
       socket.emit('watch:restored', { clientIds: [...remembered.ids] });
@@ -292,8 +280,8 @@ function bindTeacher(socket) {
     if (!userWatches.has(userId)) userWatches.set(userId, { ids: new Set(), timer: null });
     userWatches.get(userId).ids.add(id);
 
-    // 有人在看就开流：这样「重新打开页面」不会出现没人点却已经在监控的怪状态
-    askClientToStream(id);
+    // 注意：这里**不**主动开流。开流只能由老师点「开始看」触发，
+    // 否则「选中一台机器」就等于开始监控了。
 
     if (typeof ack === 'function') ack({ ok: true, online: isClientOnline(id) });
   });
