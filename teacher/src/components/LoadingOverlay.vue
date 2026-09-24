@@ -8,17 +8,22 @@ const props = defineProps({
   steps: { type: Array, default: () => [] },
   step: { type: Number, default: 0 },
   patienceHint: { type: Boolean, default: false },
+  // 收尾用：进度满了以后整块淡掉，只剩背景
+  fading: { type: Boolean, default: false },
 });
 
 const percent = computed(() => {
   if (!props.steps.length) return 12;
   return Math.round(((props.step + 1) / props.steps.length) * 100);
 });
+
+// 卡片跟着进度一点点变淡：走到 100% 时已经淡掉三分之一
+const cardOpacity = computed(() => Math.max(0.2, 1 - (percent.value / 100) * 0.35));
 </script>
 
 <template>
-  <div v-if="visible" class="overlay">
-    <div class="box glass">
+  <div v-if="visible" class="overlay" :class="{ fading }">
+    <div class="box glass" :style="{ opacity: cardOpacity }">
       <p class="eyebrow">Mythclass</p>
       <h3>{{ title }}</h3>
 
@@ -46,11 +51,17 @@ const percent = computed(() => {
   place-items: center;
   background: color-mix(in srgb, var(--ink) 72%, transparent);
   backdrop-filter: blur(10px);
+  transition: opacity 0.5s ease;
+}
+/* 收尾：连背景一起淡掉，把画面交给后面的星幕 */
+.overlay.fading {
+  opacity: 0;
 }
 .box {
   width: min(430px, 90vw);
   padding: 30px 28px;
   transform: translateY(-4%);
+  transition: opacity 0.4s ease;
 }
 .box h3 { margin: 0 0 18px; font-size: 20px; }
 .bar {

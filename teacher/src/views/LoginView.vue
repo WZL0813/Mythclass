@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useAuthStore } from '@/stores/auth';
 import LoadingOverlay from '@/components/LoadingOverlay.vue';
+import { playStarReveal } from '@/composables/starReveal';
 
 const router = useRouter();
 const route = useRoute();
@@ -14,6 +15,7 @@ const loading = ref(false);
 const step = ref(0);
 const patience = ref(false);
 const error = ref('');
+const fading = ref(false); // 加载卡片开始淡掉
 
 const steps = ['正在登录…', '正在连接服务器…', '正在寻找客户端…'];
 
@@ -44,7 +46,18 @@ async function submit() {
     await new Promise((r) => setTimeout(r, 260));
 
     ElMessage.success(`欢迎回来，${user.username}`);
+
+    // ① 加载界面随进度变淡，最后只剩背景
+    fading.value = true;
+    await new Promise((r) => setTimeout(r, 420));
+    loading.value = false;
+
+    // ② 拉起星幕，同时把路由切过去 —— 新页面先在星幕后面铺好
+    const revealed = playStarReveal();
     router.push(route.query.redirect || '/dashboard');
+
+    // ③ 星子汇聚成 Mythclass，星幕淡出时页面由淡到正常
+    await revealed;
   } catch (err) {
     error.value = err.message;
     loading.value = false;
@@ -87,7 +100,14 @@ async function submit() {
       </p>
     </div>
 
-    <LoadingOverlay :visible="loading" title="正在进门" :steps="steps" :step="step" :patience-hint="patience" />
+    <LoadingOverlay
+      :visible="loading"
+      :fading="fading"
+      title="正在进门"
+      :steps="steps"
+      :step="step"
+      :patience-hint="patience"
+    />
   </div>
 </template>
 
