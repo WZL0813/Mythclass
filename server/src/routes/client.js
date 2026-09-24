@@ -13,6 +13,18 @@ const presence = require('../sockets');
 
 const router = express.Router();
 
+/** 客户端可能报好几个网卡地址，只收内网段、最多 8 个 */
+function normalizeLocalIps(raw) {
+  if (!Array.isArray(raw)) return null;
+  const keep = [];
+  for (const item of raw.slice(0, 8)) {
+    const ip = String(item || '').trim();
+    if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) continue;
+    if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|169\.254\.)/.test(ip)) keep.push(ip);
+  }
+  return keep.length ? [...new Set(keep)].join(',') : null;
+}
+
 /**
  * 客户端崩了往这儿报。
  *
@@ -46,6 +58,7 @@ router.post('/register', (req, res) => {
   const name = String(req.body.name || '').trim() || null;
   const os = String(req.body.os || '').slice(0, 120);
   const version = String(req.body.version || '').slice(0, 40);
+  const localIps = normalizeLocalIps(req.body.localIps);
 
   if (!/^[A-Z0-9-]{6,64}$/.test(clientUid)) {
     return res.status(400).json({ error: 'INVALID_CLIENT_UID', message: '客户端 ID 格式不对' });
@@ -54,8 +67,10 @@ router.post('/register', (req, res) => {
   let client = db.prepare('SELECT * FROM clients WHERE client_uid = ?').get(clientUid);
   if (!client) {
     const info = db
-      .prepare('INSERT INTO clients (client_uid, name, os, version, last_seen, last_ip) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)')
-      .run(clientUid, name || `未命名一体机 ${clientUid.slice(-4)}`, os, version, req.ip || null);
+      .prepare(
+        'INSERT INTO clients (client_uid, name, os, version, last_seen, last_ip, local_ips) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)'
+      )
+      .run(clientUid, name || `未命名一体机 ${clientUid.slice(-4)}`, os, version, req.ip || null, localIps);
     client = db.prepare('SELECT * FROM clients WHERE id = ?').get(info.lastInsertRowid);
     console.log(`[Mythclass] 新客户端注册：${clientUid} (#${client.id})`);
   } else {
@@ -86,10 +101,17 @@ router.get('/config', (req, res) => {
 });
 
 router.post('/heartbeat', (req, res) => {
-  db.prepare('UPDATE clients SET last_seen = CURRENT_TIMESTAMP, last_ip = ? WHERE id = ?').run(
-    req.clientIp || null,
-    req.client.id
-  );
+  const localIps = normalizeLocalIps(req.body && req.body.localIps);
+  if (localIps) {
+    db.prepare(
+      'UPDATE clients SET last_seen = CURRENT_TIMESTAMP, last_ip = ?, local_ips = ? WHERE id = ?'
+    ).run(req.clientIp || null, localIps, req.client.id);
+  } else {
+    db.prepare('UPDATE clients SET last_seen = CURRENT_TIMESTAMP, last_ip = ? WHERE id = ?').run(
+      req.clientIp || null,
+      req.client.id
+    );
+  }
   res.json({ ok: true, t: Date.now() });
 });
 

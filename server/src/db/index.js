@@ -115,6 +115,14 @@ CREATE TABLE IF NOT EXISTS system_settings (
 );
 `);
 
+// 小迁移：老库补列。SQLite 没有 IF NOT EXISTS 的 ADD COLUMN，只能试着加、错了就算
+try {
+  db.exec('ALTER TABLE clients ADD COLUMN local_ips TEXT');
+  console.log('[Mythclass] clients 表补了 local_ips 列');
+} catch (_) {
+  /* 已经有了 */
+}
+
 // 初始数据（只在缺失时插入，不覆盖已有值）
 const seed = db.prepare('INSERT OR IGNORE INTO system_settings (key, value) VALUES (?, ?)');
 seed.run('registration_open', 'true');

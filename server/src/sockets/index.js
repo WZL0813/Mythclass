@@ -58,6 +58,15 @@ function stats() {
 /* ------------------------------ 定向发送 ------------------------------ */
 
 /** 只发给那一台一体机 */
+/** 从握手请求里取出访问者真实 IP（隧道后面看 x-forwarded-for） */
+function visitorIp(request) {
+  const fwd = (request && request.headers && request.headers['x-forwarded-for']) || '';
+  const first = String(fwd).split(',')[0].trim();
+  if (first) return first;
+  const addr = (request && request.connection && request.connection.remoteAddress) || '';
+  return String(addr).replace(/^::ffff:/, '');
+}
+
 function sendToClient(clientId, event, payload) {
   const set = clientSockets.get(Number(clientId));
   if (!set || set.size === 0) return false;
@@ -175,6 +184,9 @@ function init(server) {
     socket.data.role = 'teacher';
     socket.data.userId = user.id;
     socket.data.username = user.username;
+    // 客户端要按 IP 记「直连次数」，所以得把真实 IP 一路带下去。
+    // 注意这里只有 socket.handshake，没有 req
+    socket.data.ip = visitorIp(socket.handshake);
     return next();
   });
 
@@ -302,7 +314,10 @@ function bindTeacher(socket) {
       if (typeof ack === 'function') ack({ ok: false, error: 'NOT_BOUND' });
       return;
     }
-    const delivered = sendToClient(id, event, { ...payload, from: { userId, username: socket.data.username } });
+    const delivered = sendToClient(id, event, {
+      ...payload,
+      from: { userId, username: socket.data.username, ip: socket.data.ip || '' },
+    });
     if (typeof ack === 'function') ack({ ok: delivered, delivered });
   };
 

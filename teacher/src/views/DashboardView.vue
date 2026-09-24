@@ -372,6 +372,19 @@ function applyFrame(payload, fromP2P) {
   lastFrameAt = now;
 }
 
+/** 当前这台机器和我是不是同一个局域网（服务端按出口 IP 判的） */
+const sameLan = computed(() => {
+  const c = selected.value;
+  if (!c) return false;
+  return c.sameNetwork === true && selectedOnline.value;
+});
+
+const sameLanHint = computed(() => {
+  const ips = (selected.value && selected.value.localIps) || [];
+  const mine = ips.length ? `它的内网地址：${ips.join('、')}` : '';
+  return `这台机器和我在同一个局域网${mine ? '。' + mine : ''}。画面会优先两端直连，不经过服务端。`;
+});
+
 const transportLabel = computed(() => {
   if (transport.value === 'relay') return '服务端中继';
   if (transport.value === 'p2p') return 'P2P 直连';
@@ -882,6 +895,14 @@ function fmtTime(t) {
               ></iconify-icon>
               {{ transportLabel }}
             </span>
+            <span
+              v-if="sameLan"
+              class="lan-chip"
+              :title="sameLanHint"
+            >
+              <Icon icon="ph:house-line" />
+              同一局域网
+            </span>
             <span class="mono stat">{{ frameSize || '—' }} · {{ frameFps }} fps</span>
             <span class="mono stat">{{ rtt === null ? '延迟 —' : '延迟 ' + rtt + ' ms' }}</span>
           </div>
@@ -1109,6 +1130,21 @@ function fmtTime(t) {
 </template>
 
 <style scoped>
+/* 「同一局域网」小标记：跟传输通道药丸并排，别抢眼但要看得见 */
+.lan-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border: 1px solid rgba(94, 154, 115, 0.45);
+  border-radius: 999px;
+  background: rgba(94, 154, 115, 0.12);
+  color: #9fd0ac;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
 .dash {
   position: relative;
   display: grid;

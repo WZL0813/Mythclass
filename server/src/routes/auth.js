@@ -150,7 +150,7 @@ router.put('/profile', teacherAuth, (req, res) => {
 
 /* ------------------------------- 客户端绑定 ------------------------------- */
 
-function listClients(userId) {
+function listClients(userId, myIp) {
   const rows = db
     .prepare(
       `SELECT c.*, b.created_at AS bound_at
@@ -169,11 +169,20 @@ function listClients(userId) {
     lastSeen: c.last_seen,
     boundAt: c.bound_at,
     online: presence.isClientOnline(c.id),
+    // 客户端上报的内网地址（调试时看得到）
+    localIps: c.local_ips ? String(c.local_ips).split(',') : [],
+    // 同一个出口 IP = 大概率同一个局域网（教室里的一体机和老师笔记本
+    // 一般都走同一个学校出口）。客户端没报过地址或看不见出口 IP 时为 null。
+    sameNetwork:
+      c.last_ip && myIp ? String(c.last_ip) === String(myIp) : null,
   }));
 }
 
 router.get('/clients', teacherAuth, (req, res) => {
-  res.json({ clients: listClients(req.user.id) });
+  // 顺手把老师自己的出口 IP 带回去，界面可以提示「你和这些机器在同一局域网」
+  // 教师端这条路由没经过 clientAuth，所以自己取一次真实 IP（和客户端那边同一个算法）
+  const myIp = clientIp(req);
+  res.json({ clients: listClients(req.user.id, myIp), myIp: myIp || null });
 });
 
 // 绑定：输入一体机上显示的 client_uid
