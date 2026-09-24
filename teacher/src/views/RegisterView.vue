@@ -237,18 +237,22 @@ async function submit() {
               <button v-if="showClose" class="gate-x" type="button" title="不玩了" @click.stop="closeGate">
                 <iconify-icon icon="ph:x-bold"></iconify-icon>
               </button>
-              <input
-                ref="gateInput"
-                v-model="gateValue"
-                class="gate-input"
-                :class="{ shake: gateShake }"
-                maxlength="4"
-                autocomplete="off"
-                spellcheck="false"
-                aria-label="四个字"
-                @input="onGateInput"
-                @keydown.enter="onGateEnter"
-              />
+              <p class="gate-label">愿望是:</p>
+              <div class="gate-cells">
+                <span v-for="n in 4" :key="n" class="gate-cell"></span>
+                <input
+                  ref="gateInput"
+                  v-model="gateValue"
+                  class="gate-input"
+                  :class="{ shake: gateShake }"
+                  maxlength="4"
+                  autocomplete="off"
+                  spellcheck="false"
+                  aria-label="四个字"
+                  @input="onGateInput"
+                  @keydown.enter="onGateEnter"
+                />
+              </div>
             </div>
           </transition>
         </div>
@@ -331,8 +335,11 @@ form { margin-top: 20px; }
   position: absolute;
   inset: 0;
   z-index: 5;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
   border-radius: 14px;
   background: radial-gradient(120% 100% at 50% 0%, rgba(24, 34, 28, 0.96), rgba(9, 14, 11, 0.98));
   border: 1px dashed rgba(148, 196, 160, 0.26);
@@ -353,19 +360,59 @@ form { margin-top: 20px; }
   transition: background 0.18s, color 0.18s;
 }
 .gate-x:hover { background: rgba(255, 255, 255, 0.15); color: #fff; }
+.gate-label {
+  margin: 0;
+  font-size: 15px;
+  color: var(--sage);
+  letter-spacing: 0.5px;
+}
+
+/* 四个格子；真正接收输入的是盖在上面的那个透明 input。
+   靠 padding-left 定位第一个字、letter-spacing 控制字距，
+   让每个字正好落在自己的格子里（中文全角，一个字宽 = 字号）。 */
+.gate-cells {
+  --w: 58px;   /* 格子宽 */
+  --g: 10px;   /* 格子间距 */
+  --f: 27px;   /* 字号 */
+  position: relative;
+  display: flex;
+  gap: var(--g);
+}
+.gate-cell {
+  width: var(--w);
+  height: 66px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 196, 160, 0.3);
+  background: rgba(255, 255, 255, 0.045);
+  transition: border-color 0.18s, background 0.18s;
+}
+.gate-cells:focus-within .gate-cell {
+  border-color: rgba(148, 196, 160, 0.62);
+  background: rgba(255, 255, 255, 0.07);
+}
 .gate-input {
-  width: min(232px, 84%);
-  padding: 12px 8px 12px 18px;
-  text-align: center;
-  font-size: 27px;
-  letter-spacing: 10px;
-  border-radius: 13px;
-  border: 1px solid rgba(148, 196, 160, 0.42);
-  background: rgba(255, 255, 255, 0.05);
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  /* 给足余量：letter-spacing 是加在每个字后面的（最后一个字也算），
+     所以四个字的排版宽 = 左边距 + 4*(字宽+字距)，比四个格子的总宽多 25px 左右。
+     框不给够，浏览器为了让光标可见会把内容往里滚 —— 第一个字就被切掉了。
+     背景透明，多出来的部分看不出来，只是点击区域往右大一点。 */
+  width: calc(100% + var(--w));
+  padding: 0 0 0 calc((var(--w) - var(--f)) / 2);
+  font-family: inherit;
+  font-size: var(--f);
+  line-height: 66px;
+  letter-spacing: calc(var(--w) + var(--g) - var(--f));
+  text-align: left;
+  background: transparent;
+  border: 0;
+  outline: none;
+  overflow: hidden;
   color: var(--text);
   caret-color: var(--sage);
 }
-.gate-input:focus { outline: none; border-color: var(--sage); }
 .shake { animation: gate-shake 0.4s; }
 @keyframes gate-shake {
   0%, 100% { transform: translateX(0); }
