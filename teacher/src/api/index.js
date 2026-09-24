@@ -77,6 +77,7 @@ export const api = {
   login: (payload) => request('/auth/login', { method: 'POST', body: payload, auth: false }),
   me: () => request('/auth/me'),
   changePassword: (payload) => request('/auth/change-password', { method: 'POST', body: payload }),
+  updateProfile: (payload) => request('/auth/profile', { method: 'PUT', body: payload }),
 
   clients: () => request('/auth/clients'),
   bindClient: (payload) => request('/auth/bind', { method: 'POST', body: payload }),

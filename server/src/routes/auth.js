@@ -109,6 +109,45 @@ router.post('/change-password', teacherAuth, (req, res) => {
   res.json({ ok: true, message: '密码已更新，请重新登录' });
 });
 
+/* 改资料：用户名 / 邮箱 */
+router.put('/profile', teacherAuth, (req, res) => {
+  const username = String(req.body.username ?? req.user.username).trim();
+  const rawEmail = String(req.body.email ?? req.user.email ?? '')
+    .trim()
+    .toLowerCase();
+
+  if (username.length < 3 || username.length > 32) {
+    return res.status(400).json({ error: 'BAD_USERNAME', message: '用户名 3-32 位' });
+  }
+  if (rawEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+    return res.status(400).json({ error: 'BAD_EMAIL', message: '邮箱格式看着不对' });
+  }
+
+  // 空邮箱存 NULL：email 上有 UNIQUE，存空串的话第二个人就进不来了
+  const email = rawEmail || null;
+
+  const nameTaken = db.prepare('SELECT id FROM users WHERE username = ? AND id <> ?').get(username, req.user.id);
+  if (nameTaken) {
+    return res.status(409).json({ error: 'USERNAME_TAKEN', message: '这个用户名有人用了' });
+  }
+  if (email) {
+    const mailTaken = db.prepare('SELECT id FROM users WHERE email = ? AND id <> ?').get(email, req.user.id);
+    if (mailTaken) {
+      return res.status(409).json({ error: 'EMAIL_TAKEN', message: '这个邮箱有人用了' });
+    }
+  }
+
+  db.prepare('UPDATE users SET username = ?, email = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
+    username,
+    email,
+    req.user.id
+  );
+
+  // 用户名可能变了，把最新的整条拿回去（token 里存的是 id，不用重登）
+  const fresh = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  res.json({ ok: true, user: publicUser(fresh), message: '资料改好了' });
+});
+
 /* ------------------------------- 客户端绑定 ------------------------------- */
 
 function listClients(userId) {

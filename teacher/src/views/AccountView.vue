@@ -16,8 +16,47 @@ const user = computed(() => auth.user || {});
 const joined = computed(() => (user.value.createdAt ? String(user.value.createdAt).slice(0, 10) : '—'));
 const lastLogin = computed(() => (user.value.lastLoginAt ? String(user.value.lastLoginAt).replace('T', ' ').slice(0, 16) : '—'));
 
+// ---- 改用户名 / 改邮箱 ----
+// 服务端把用户名和邮箱当唯一键，重名会返回 409，这儿不用自己先查一遍
+const profile = ref({ username: '', email: '' });
+const savingProfile = ref(false);
+
+function resetProfile() {
+  profile.value = { username: user.value.username || '', email: user.value.email || '' };
+}
+
+const profileDirty = computed(() => {
+  const name = profile.value.username.trim();
+  const mail = profile.value.email.trim().toLowerCase();
+  return name !== (user.value.username || '') || mail !== (user.value.email || '').toLowerCase();
+});
+
+async function saveProfile() {
+  const name = profile.value.username.trim();
+  const mail = profile.value.email.trim();
+
+  if (name.length < 3) return ElMessage.warning('用户名至少 3 位。');
+  if (name.length > 32) return ElMessage.warning('用户名最多 32 位。');
+  if (mail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) return ElMessage.warning('邮箱格式看着不对。');
+  if (!profileDirty.value) return ElMessage.info('还没改什么呢。');
+
+  savingProfile.value = true;
+  try {
+    const data = await api.updateProfile({ username: name, email: mail });
+    auth.user = data.user; // 直接换上，导航栏的名字跟着变
+    resetProfile();
+    ElMessage.success('资料改好了。');
+  } catch (err) {
+    ElMessage.error(err.message); // 重名之类，服务端说得比自己清楚
+  } finally {
+    savingProfile.value = false;
+  }
+  return undefined;
+}
+
 onMounted(async () => {
   if (!auth.user) await auth.restore();
+  resetProfile();
   try {
     await auth.fetchClients();
     clientCount.value = auth.clients.length;
@@ -75,8 +114,28 @@ async function logout() {
     <header class="head reveal">
       <p class="eyebrow">账号设置</p>
       <h1>{{ auth.displayName }}</h1>
-      <p class="muted">账号在服务端，这儿只改密码和看你绑了几台机器。</p>
+      <p class="muted">账号在服务端。这儿改资料、改密码，也能看你绑了几台机器。</p>
     </header>
+
+    <section class="card profile">
+      <h2>改资料</h2>
+      <p class="muted">用户名和邮箱随时能改。改完照旧登录，不用重新登一次。</p>
+      <!-- novalidate：不加的话，email 框里填了非法值时浏览器会自己拦下提交，
+           我们自己的中文提示永远轮不到显示 -->
+      <form class="profile-form" novalidate @submit.prevent="saveProfile">
+        <div class="field">
+          <label>用户名（3-32 位）</label>
+          <input v-model.trim="profile.username" autocomplete="username" />
+        </div>
+        <div class="field">
+          <label>邮箱（可留空）</label>
+          <input v-model.trim="profile.email" type="email" autocomplete="email" placeholder="找回密码时会用" />
+        </div>
+        <button class="btn primary" type="submit" :disabled="savingProfile || !profileDirty">
+          <iconify-icon icon="ph:floppy-disk"></iconify-icon>{{ savingProfile ? '正在保存…' : '保存' }}
+        </button>
+      </form>
+    </section>
 
     <div class="cols">
       <section class="card">
@@ -134,6 +193,17 @@ async function logout() {
 .head { margin-bottom: 26px; }
 .head h1 { font-size: clamp(24px, 3vw, 34px); margin-bottom: 8px; }
 .cols { display: grid; grid-template-columns: 1fr 1.1fr; gap: 16px; margin-bottom: 16px; }
+.profile { margin-bottom: 16px; }
+.profile-form {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr auto;
+  align-items: end;
+  gap: 14px;
+}
+.profile-form .btn { height: 42px; white-space: nowrap; }
+@media (max-width: 780px) {
+  .profile-form { grid-template-columns: 1fr; }
+}
 .card { margin-bottom: 0; }
 .card h2 { font-size: 18px; margin-bottom: 12px; }
 .kv { display: grid; gap: 10px; margin-bottom: 16px; }
