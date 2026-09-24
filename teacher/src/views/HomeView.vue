@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { playStarRevealThen } from '@/composables/starReveal';
 import quotes from '@/data/quotes.json';
 
 const router = useRouter();
@@ -44,6 +45,11 @@ const arch = [
 ];
 
 function go(path) {
+  // 进控制台先拉星幕，和登录/注册那套完全一致
+  if (path === '/dashboard') {
+    playStarRevealThen(() => router.push(path));
+    return;
+  }
   router.push(path);
 }
 </script>

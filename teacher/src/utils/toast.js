@@ -11,8 +11,10 @@
  */
 
 const HOST_ID = 'myth-toasts';
-const MAX_ALIVE = 4; // DOM 里最多留几条（再多也看不见，留着没用）
-const MAX_QUEUE = 6;
+const MAX_ALIVE = 2; // 同时最多两条（视觉上就一条半）
+const MAX_QUEUE = 3; // 排队也别攒多，不然一崩就是一串
+const MIN_GAP_MS = 700; // 两条之间至少隔这么久，防止一次事件风暴糊满屏
+const DEDUPE_MS = 4000; // 同样的话 4 秒内只弹一次
 
 const ICONS = {
   success: 'ph:check-circle',
@@ -70,6 +72,8 @@ function spawn(kind, message, duration) {
 }
 
 const queue = [];
+const recent = new Map(); // 文案 -> 上次弹的时间
+let lastSpawnAt = 0;
 
 function drain() {
   while (queue.length && ensureHost().querySelectorAll('.myth-toast:not(.out)').length < MAX_ALIVE) {
@@ -78,17 +82,39 @@ function drain() {
   }
 }
 
-function push(kind, message, duration = 2800) {
+function push(kind, message, duration = 2600) {
   const text = String(message ?? '').trim();
   if (!text) return;
-  // 同样的内容还排着队就别重复塞
-  if (queue.some((q) => q.kind === kind && q.message === text)) return;
+
+  // 同样的话短时间内只弹一次
+  const now = Date.now();
+  const seen = recent.get(text) || 0;
+  if (now - seen < DEDUPE_MS) return;
+  // 还排着队的也别重复塞
+  if (queue.some((q) => q.message === text)) return;
+
+  recent.set(text, now);
+  if (recent.size > 40) {
+    for (const [key, at] of recent) {
+      if (now - at > DEDUPE_MS) recent.delete(key);
+    }
+  }
 
   queue.push({ kind, message: text, duration });
   if (queue.length > MAX_QUEUE) queue.splice(0, queue.length - MAX_QUEUE);
-  drain();
-  // 有消息走掉以后，把排队的顶上来
-  setTimeout(drain, duration + 300);
+
+  // 节流：两条之间至少隔 MIN_GAP_MS，事件风暴时不会糊满屏
+  const wait = Math.max(0, MIN_GAP_MS - (now - lastSpawnAt));
+  if (wait > 0) {
+    setTimeout(() => {
+      lastSpawnAt = Date.now();
+      drain();
+    }, wait);
+  } else {
+    lastSpawnAt = now;
+    drain();
+  }
+  setTimeout(drain, duration + 320);
 }
 
 export const toast = {

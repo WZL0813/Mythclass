@@ -23,6 +23,13 @@ export function playStarReveal() {
 }
 
 /** 星幕开始淡出：页面这一刻开始显形 */
+/** 放星幕，同时把页面切过去 —— 登录/注册/进控制台都用这一条 */
+export function playStarRevealThen(action) {
+  const done = playStarReveal();
+  if (typeof action === 'function') action();
+  return done;
+}
+
 export function unveilPage() {
   pageVeiled.value = false;
 }

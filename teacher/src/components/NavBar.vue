@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { playStarRevealThen } from '@/composables/starReveal';
 
 defineProps({ theme: { type: String, default: 'dark' } });
 const emit = defineEmits(['toggle-theme']);
@@ -32,6 +33,11 @@ const links = computed(() =>
 
 function go(to) {
   menuOpen.value = false;
+  // 进控制台也走一遍星光，和登录/注册一致
+  if (to === '/dashboard') {
+    playStarRevealThen(() => router.push('/dashboard'));
+    return;
+  }
   if (to.includes('#')) {
     const [path, hash] = to.split('#');
     router.push(path || '/').then(() => {

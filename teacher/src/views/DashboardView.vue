@@ -181,9 +181,10 @@ onMounted(async () => {
       if (!payload || payload.clientId !== selectedId.value) return;
       commandLog.value.unshift(payload);
       if (commandLog.value.length > 40) commandLog.value.pop();
-      toast[payload.ok ? 'success' : 'warning'](
-        `${payload.command || '命令'}：${payload.ok ? '已执行' : '失败了'}`
-      );
+      // 成功的命令只记进右边的事件栏，不再弹 —— 一次批量下发会糊满屏
+      if (!payload.ok) {
+        toast.warning(`${payload.command || '命令'} 失败了`);
+      }
     },
   });
 
