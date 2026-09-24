@@ -90,6 +90,18 @@ CREATE TABLE IF NOT EXISTS settings (
   FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS client_errors (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  client_id  INTEGER,
+  client_uid TEXT,
+  kind       TEXT,
+  message    TEXT,
+  detail     TEXT,
+  version    TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS admins (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   username      TEXT UNIQUE NOT NULL DEFAULT 'admin',

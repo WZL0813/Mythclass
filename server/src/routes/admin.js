@@ -320,6 +320,16 @@ router.get('/clients', (req, res) => {
   });
 });
 
+/* 这台机器的崩溃上报（最近 30 条） */
+router.get('/clients/:id/errors', (req, res) => {
+  const rows = db
+    .prepare(
+      'SELECT id, kind, message, detail, version, created_at FROM client_errors WHERE client_id = ? ORDER BY id DESC LIMIT 30'
+    )
+    .all(Number(req.params.id));
+  res.json({ errors: rows });
+});
+
 router.get('/clients/:id', (req, res) => {
   const c = db
     .prepare(

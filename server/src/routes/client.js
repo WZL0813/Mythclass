@@ -13,6 +13,33 @@ const presence = require('../sockets');
 
 const router = express.Router();
 
+/**
+ * 客户端崩了往这儿报。
+ *
+ * 故意放在 clientAuth 之前：客户端可能还没注册成功就崩了，
+ * 那种时候它没有凭证，但这条消息恰恰最有用。
+ * 所以只认 clientUid，同时把正文长度卡死，免得被灌垃圾。
+ */
+router.post('/errors', (req, res) => {
+  const clientUid = String(req.body.clientUid || '').trim().toUpperCase().slice(0, 64);
+  const kind = String(req.body.kind || 'error').slice(0, 40);
+  const message = String(req.body.message || '').slice(0, 500);
+  const detail = String(req.body.detail || '').slice(0, 8000);
+  const version = String(req.body.version || '').slice(0, 40);
+
+  if (!clientUid || (!message && !detail)) {
+    return res.status(400).json({ error: 'BAD_REPORT', message: '缺 clientUid 或内容' });
+  }
+
+  const client = db.prepare('SELECT id FROM clients WHERE client_uid = ?').get(clientUid);
+  db.prepare(
+    'INSERT INTO client_errors (client_id, client_uid, kind, message, detail, version) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(client ? client.id : null, clientUid, kind, message, detail, version);
+
+  console.log(`[Mythclass] 客户端报错 ${clientUid}（${kind}）：${message.slice(0, 120)}`);
+  res.status(201).json({ ok: true });
+});
+
 /** 客户端第一次跑起来，拿一个长期凭证 */
 router.post('/register', (req, res) => {
   const clientUid = String(req.body.clientUid || req.body.client_uid || '').trim().toUpperCase();
