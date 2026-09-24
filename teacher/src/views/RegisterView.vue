@@ -5,6 +5,7 @@ import { ElMessage } from 'element-plus';
 import { useAuthStore } from '@/stores/auth';
 import { api } from '@/api';
 import LoadingOverlay from '@/components/LoadingOverlay.vue';
+import { playStarReveal } from '@/composables/starReveal';
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -16,6 +17,7 @@ const patience = ref(false);
 const error = ref('');
 const open = ref(true);
 const checking = ref(true);
+const fading = ref(false); // 加载卡片开始淡掉
 
 const steps = ['正在提交注册…', '正在创建账号…', '正在连接服务器…'];
 
@@ -185,7 +187,15 @@ async function submit() {
     step.value = 2;
     await auth.fetchClients().catch(() => {});
     ElMessage.success(`注册好了，${user.username}`);
+
+    // 和登录一模一样的三步：卡片淡掉 → 星光汇聚 → 页面由淡到正常
+    fading.value = true;
+    await new Promise((r) => setTimeout(r, 420));
+    loading.value = false;
+
+    const revealed = playStarReveal();
     router.push('/dashboard');
+    await revealed;
   } catch (err) {
     error.value = err.message;
     loading.value = false;
@@ -271,7 +281,14 @@ async function submit() {
       </p>
     </div>
 
-    <LoadingOverlay :visible="loading" title="正在建号" :steps="steps" :step="step" :patience-hint="patience" />
+    <LoadingOverlay
+      :visible="loading"
+      :fading="fading"
+      title="正在建号"
+      :steps="steps"
+      :step="step"
+      :patience-hint="patience"
+    />
 
     <!-- 成就：从右上角划进来，停一会儿，再划回屏幕外 -->
     <transition name="toast">

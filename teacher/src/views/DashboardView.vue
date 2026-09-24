@@ -1,9 +1,10 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useAuthStore } from '@/stores/auth';
 import { api, OFFICIAL_SERVER, SERVER_URL } from '@/api';
+import StarBackdrop from '@/components/StarBackdrop.vue';
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -37,6 +38,14 @@ const fileLimit = 30;
 
 const settings = ref({ maxLogCount: 5000, maxLogSize: 209715200 });
 const commandLog = ref([]);
+
+/* --------------------- 极域那套：缩略图墙 + 右侧事件栏 --------------------- */
+
+const thumbs = ref({}); // clientId -> 小图 dataURL
+const thumbAt = ref({}); // clientId -> 上次拿到小图的时间
+const evTab = ref('event');
+const msgLog = ref([]); // 上下线之类的消息
+let thumbTimer = null;
 
 const bindDialog = ref({ open: false, uid: '', name: '', busy: false });
 const textDialog = ref({ open: false, kind: 'message', title: '', value: '', placeholder: '' });
@@ -76,6 +85,55 @@ const commands = [
   { key: 'net_ban_lift', label: '放开上网', icon: 'ph:shield-check', args: [] },
 ];
 
+/** 上下线记进「消息」：极域右下角那个列表也是干这个的 */
+watch(
+  () => ({ ...auth.presence }),
+  (now, before) => {
+    for (const c of clients.value) {
+      const was = before ? before[c.id] : undefined;
+      if (was === now[c.id]) continue;
+      const label = c.name || c.clientUid;
+      if (now[c.id]) pushMessage(`${label} 上线了`);
+      else if (was !== undefined) pushMessage(`${label} 断开了`);
+    }
+  },
+  { deep: true }
+);
+
+/** 顶部那一横条：常用的几个动作，跟极域的工具栏一个意思 */
+const quickTools = computed(() => [
+  {
+    key: 'screen',
+    label: screenOn.value ? '停止画面' : '屏幕广播',
+    icon: screenOn.value ? 'ph:pause' : 'ph:monitor-play',
+    run: () => (screenOn.value ? stopScreen() : startScreen()),
+  },
+  {
+    key: 'control',
+    label: controlMode.value ? '退出控制' : '远程控制',
+    icon: 'ph:cursor-click',
+    run: () => (controlMode.value = !controlMode.value),
+  },
+  { key: 'lock', label: '锁屏', icon: 'ph:lock', run: () => runCommand(commands[0]) },
+  { key: 'unlock', label: '解锁', icon: 'ph:lock-open', run: () => runCommand(commands[1]) },
+  { key: 'message', label: '弹消息', icon: 'ph:chat-centered-text', run: () => runCommand(commands[5]) },
+  { key: 'broadcast', label: '演示广播', icon: 'ph:broadcast', run: () => runCommand(commands[9]) },
+  { key: 'ban', label: '禁止上网', icon: 'ph:prohibit', run: () => runCommand(commands[10]) },
+  { key: 'unban', label: '放开上网', icon: 'ph:shield-check', run: () => runCommand(commands[11]) },
+  { key: 'shot', label: '截图', icon: 'ph:camera', run: () => screenshot() },
+  { key: 'reboot', label: '重启', icon: 'ph:arrows-clockwise', run: () => runCommand(commands[3]) },
+  { key: 'shutdown', label: '关机', icon: 'ph:power', run: () => runCommand(commands[2]) },
+]);
+
+/** 右侧那一栏：事件看命令回执，消息看上下线 */
+const evList = computed(() => {
+  if (evTab.value === 'message') return msgLog.value;
+  return commandLog.value.slice(0, 60).map((r) => ({
+    time: r.time || '',
+    text: `${r.command || '命令'} · ${r.ok ? '成功' : '失败'}`,
+  }));
+});
+
 /* -------------------------------- 启动/收尾 -------------------------------- */
 
 onMounted(async () => {
@@ -94,8 +152,20 @@ onMounted(async () => {
     loading.value = false;
   }
 
+  // 机器墙每隔一会儿补一遍小图
+  startThumbPoll();
+
+
   auth.openSocket({
-    onFrame: (payload) => applyFrame(payload, false),
+    onFrame: (payload) => {
+      // 缩略图只进机器墙，别糊到主画面上
+      if (payload && payload.thumb) {
+        thumbs.value[payload.clientId] = payload.data;
+        thumbAt.value[payload.clientId] = Date.now();
+        return;
+      }
+      applyFrame(payload, false);
+    },
     onAudio: (payload) => {
       if (!payload || payload.clientId !== selectedId.value) return;
       const first = (payload.items || [])[0];
@@ -130,11 +200,58 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   stopStatsProbe();
   closeP2P();
+  stopThumbPoll();
   if (selectedId.value && screenOn.value) auth.sendCommand(selectedId.value, 'screen_stop');
   auth.unwatchClient(selectedId.value);
 });
 
 /* -------------------------------- 客户端操作 -------------------------------- */
+
+function stamp() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+function pushMessage(text) {
+  msgLog.value.unshift({ time: stamp(), text });
+  if (msgLog.value.length > 80) msgLog.value.pop();
+}
+
+/** 问一台机器要一张小图。不用回执，丢了就丢了 */
+function askThumb(c) {
+  const socket = auth.socket;
+  if (!socket || !socket.connected) return;
+  socket.emit('command', {
+    clientId: c.id,
+    command: 'request_frame',
+    args: { width: 320, quality: 40 },
+    requestId: `thumb-${c.id}-${Date.now()}`,
+  });
+}
+
+/** 隔一会儿给机器墙补一遍小图。只在页面可见时问 */
+function pollThumbs() {
+  if (document.hidden) return;
+  for (const c of clients.value) {
+    if (!auth.presence[c.id]) continue; // 离线的问也白问
+    auth.watchClient(c.id); // 订阅了才收得到它发的帧
+    askThumb(c);
+  }
+}
+
+function startThumbPoll() {
+  stopThumbPoll();
+  setTimeout(pollThumbs, 1200);
+  thumbTimer = setInterval(pollThumbs, 10000);
+}
+
+function stopThumbPoll() {
+  if (thumbTimer) {
+    clearInterval(thumbTimer);
+    thumbTimer = null;
+  }
+}
 
 function selectClient(client) {
   if (selectedId.value === client.id) return;
@@ -639,7 +756,25 @@ function fmtTime(t) {
 
 <template>
   <div class="dash">
-    <!-- 左侧：机器列表 -->
+    <!-- 背后的星光，和登录过场同一片 -->
+    <StarBackdrop />
+
+    <!-- 顶部工具条 -->
+    <div class="top-bar">
+      <button
+        v-for="t in quickTools"
+        :key="t.key"
+        class="tool"
+        :disabled="!selected || !selectedOnline"
+        @click="t.run()"
+      >
+        <iconify-icon :icon="t.icon"></iconify-icon>
+        <span>{{ t.label }}</span>
+      </button>
+      <p class="top-now mono">{{ selected ? selected.name || selected.clientUid : '先选一台机器' }}</p>
+    </div>
+
+    <!-- 左侧：机器缩略图墙 -->
     <aside class="rail">
       <div class="rail-head">
         <p class="eyebrow">我的机器</p>
@@ -656,19 +791,21 @@ function fmtTime(t) {
         <p class="muted">去一体机上打开客户端，抄下它的 ID，再点上面的「绑定」。</p>
       </div>
 
-      <ul class="client-list">
+      <ul class="client-grid">
         <li
           v-for="c in clients"
           :key="c.id"
-          :class="['client', { active: c.id === selectedId }]"
+          :class="['cell', { active: c.id === selectedId }]"
           @click="selectClient(c)"
         >
-          <span :class="['live', auth.presence[c.id] ? 'on' : '']"></span>
-          <div class="client-main">
-            <p class="cname">{{ c.name || '未命名一体机' }}</p>
-            <p class="cmeta mono">{{ c.clientUid }}</p>
+          <div class="thumb">
+            <img v-if="thumbs[c.id]" :src="thumbs[c.id]" :alt="c.name || c.clientUid" />
+            <div v-else class="thumb-empty">
+              <iconify-icon icon="ph:monitor"></iconify-icon>
+            </div>
+            <span :class="['live', auth.presence[c.id] ? 'on' : '']"></span>
           </div>
-          <span class="mono cseen">{{ c.lastSeen ? String(c.lastSeen).slice(11, 16) : '—' }}</span>
+          <p class="cname">{{ c.name || '未命名一体机' }}</p>
         </li>
       </ul>
 
@@ -920,6 +1057,23 @@ function fmtTime(t) {
       </template>
     </section>
 
+    <!-- 右侧：事件 / 消息（极域右边那一栏） -->
+    <aside class="events">
+      <div class="ev-tabs">
+        <button :class="['ev-tab', { active: evTab === 'event' }]" @click="evTab = 'event'">事件</button>
+        <button :class="['ev-tab', { active: evTab === 'message' }]" @click="evTab = 'message'">消息</button>
+      </div>
+      <ul class="ev-list">
+        <li v-for="(e, i) in evList" :key="i">
+          <span class="ev-time mono">{{ e.time }}</span>
+          <span class="ev-text">{{ e.text }}</span>
+        </li>
+        <li v-if="!evList.length" class="muted tiny">
+          {{ evTab === 'event' ? '还没发过命令。' : '机器上下线会记在这儿。' }}
+        </li>
+      </ul>
+    </aside>
+
     <!-- 绑定弹窗 -->
     <div v-if="bindDialog.open" class="modal-layer" @click.self="bindDialog.open = false">
       <div class="modal glass">
@@ -958,25 +1112,105 @@ function fmtTime(t) {
 
 <style scoped>
 .dash {
+  position: relative;
   display: grid;
-  grid-template-columns: 268px 1fr;
+  grid-template-columns: 296px minmax(0, 1fr) 268px;
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: calc(100vh - 62px);
 }
 
+/* ------------------------------ 顶部工具条 ------------------------------ */
+.top-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--ink) 74%, transparent);
+  backdrop-filter: blur(8px);
+  z-index: 2;
+}
+.tool {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-width: 66px;
+  padding: 7px 8px 6px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.16s, color 0.16s, border-color 0.16s;
+}
+.tool iconify-icon { font-size: 19px; }
+.tool span { font-size: 11.5px; }
+.tool:hover:not(:disabled) {
+  background: rgba(243, 239, 227, 0.07);
+  color: var(--text);
+  border-color: rgba(143, 168, 142, 0.3);
+}
+.tool:disabled { opacity: 0.35; cursor: not-allowed; }
+.top-now { margin: 0 0 0 auto; font-size: 12px; color: var(--sage); }
+
 /* --------------------------------- 侧栏 --------------------------------- */
 .rail {
+  grid-row: 2;
   border-right: 1px solid var(--line);
-  padding: 20px 16px;
+  padding: 14px 12px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: color-mix(in srgb, var(--ink) 60%, transparent);
+  background: color-mix(in srgb, var(--ink) 58%, transparent);
+  backdrop-filter: blur(6px);
+  min-height: 0;
+  z-index: 1;
 }
 .rail-head { display: flex; align-items: center; justify-content: space-between; }
 .rail-head .eyebrow { margin: 0; }
 .rail-sum { font-size: 12px; color: var(--sage); margin: 0; }
 .rail-empty { font-size: 13px; line-height: 1.7; }
-.client-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; overflow-y: auto; }
+/* 机器墙：一格一台，跟极域一样 */
+.client-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 10px;
+  overflow-y: auto;
+  align-content: start;
+}
+.cell {
+  display: grid;
+  gap: 5px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.16s, border-color 0.16s;
+}
+.cell:hover { background: rgba(243, 239, 227, 0.05); }
+.cell.active {
+  background: rgba(63, 107, 82, 0.28);
+  border-color: rgba(143, 168, 142, 0.45);
+}
+.thumb {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  border-radius: 7px;
+  overflow: hidden;
+  background: rgba(8, 14, 10, 0.75);
+  border: 1px solid rgba(143, 168, 142, 0.22);
+  display: grid;
+  place-items: center;
+}
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb-empty iconify-icon { font-size: 20px; color: rgba(143, 168, 142, 0.5); }
+.cell .live { position: absolute; top: 5px; right: 5px; }
+.cell .cname { font-size: 11.5px; text-align: center; }
 .client {
   display: flex;
   align-items: center;
@@ -1003,7 +1237,34 @@ function fmtTime(t) {
 .tiny { font-size: 11px; margin: 2px 0; word-break: break-all; }
 
 /* --------------------------------- 工作区 --------------------------------- */
-.work { padding: 20px 26px 40px; min-width: 0; }
+.work { grid-row: 2; padding: 18px 22px 40px; min-width: 0; overflow-y: auto; z-index: 1; }
+
+/* ------------------------------ 右侧事件栏 ------------------------------ */
+.events {
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+  background: color-mix(in srgb, var(--ink) 58%, transparent);
+  backdrop-filter: blur(6px);
+  min-height: 0;
+  z-index: 1;
+}
+.ev-tabs { display: flex; border-bottom: 1px solid var(--line); }
+.ev-tab {
+  flex: 1;
+  padding: 10px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+}
+.ev-tab.active { color: var(--text); box-shadow: inset 0 -2px 0 var(--moss-2); }
+.ev-list { list-style: none; margin: 0; padding: 10px 12px; display: grid; gap: 7px; overflow-y: auto; }
+.ev-list li { display: flex; gap: 8px; font-size: 12.5px; line-height: 1.5; }
+.ev-time { color: var(--sage); flex: 0 0 auto; }
+.ev-text { color: var(--text-dim); word-break: break-all; }
 .empty { display: grid; place-items: center; gap: 8px; padding: 120px 20px; text-align: center; }
 .empty iconify-icon { font-size: 42px; color: var(--sage); }
 
@@ -1118,6 +1379,11 @@ th { color: var(--sage); font-weight: 500; font-size: 12.4px; }
 .modal { width: min(480px, 92vw); padding: 26px; }
 .modal h3 { font-size: 18px; margin-bottom: 10px; }
 .modal-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+@media (max-width: 1180px) {
+  .dash { grid-template-columns: 250px minmax(0, 1fr); }
+  .events { display: none; }
+}
 
 @media (max-width: 1000px) {
   .dash { grid-template-columns: 1fr; }
