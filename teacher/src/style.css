@@ -182,3 +182,9 @@ h1, h2, h3 { line-height: 1.28; margin: 0; }
   --el-button-hover-border-color: #3f6b52;
 }
 .el-message { border-radius: 12px; }
+/* 顶部消息最多露「一条半」：第二条裁掉下半截，更后面的排队等前面走完 */
+.el-message.toast-peek {
+  clip-path: inset(0 0 54% 0);
+  opacity: 0.9;
+}
+

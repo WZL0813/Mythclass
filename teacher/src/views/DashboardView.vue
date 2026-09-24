@@ -1,7 +1,8 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessageBox } from 'element-plus';
+import { toast } from '@/utils/toast';
 import { useAuthStore } from '@/stores/auth';
 import { api, OFFICIAL_SERVER, SERVER_URL } from '@/api';
 import StarBackdrop from '@/components/StarBackdrop.vue';
@@ -140,14 +141,14 @@ onMounted(async () => {
   try {
     if (!auth.user) await auth.fetchMe();
   } catch (err) {
-    ElMessage.error(err.message);
+    toast.error(err.message);
   }
 
   try {
     await auth.fetchClients();
     if (clients.value.length) selectClient(clients.value[0]);
   } catch (err) {
-    ElMessage.error(err.message);
+    toast.error(err.message);
   } finally {
     loading.value = false;
   }
@@ -180,7 +181,7 @@ onMounted(async () => {
       if (!payload || payload.clientId !== selectedId.value) return;
       commandLog.value.unshift(payload);
       if (commandLog.value.length > 40) commandLog.value.pop();
-      ElMessage[payload.ok ? 'success' : 'warning'](
+      toast[payload.ok ? 'success' : 'warning'](
         `${payload.command || '命令'}：${payload.ok ? '已执行' : '失败了'}`
       );
     },
@@ -434,7 +435,7 @@ async function startScreen(force = false) {
     startStatsProbe();
     startP2P(selectedId.value); // 直连能成就不用占服务端带宽
   } else {
-    ElMessage.warning('没连上，可能机器离线。');
+    toast.warning('没连上，可能机器离线。');
   }
 }
 
@@ -442,7 +443,7 @@ async function stopScreen() {
   if (selectedId.value) {
     const ack = await auth.sendCommand(selectedId.value, 'screen_stop');
     if (!ack || !ack.ok) {
-      ElMessage.warning('停止命令没发出去（连接断了？），那台机器可能还在推流。');
+      toast.warning('停止命令没发出去（连接断了？），那台机器可能还在推流。');
     }
   }
   screenOn.value = false;
@@ -471,7 +472,7 @@ function toggleFullscreen() {
 }
 
 function screenshot() {
-  if (!frameSrc.value) return ElMessage.warning('还没有画面。');
+  if (!frameSrc.value) return toast.warning('还没有画面。');
   const a = document.createElement('a');
   a.href = frameSrc.value;
   a.download = `${selected.value.name || 'mythclass'}-${Date.now()}.jpg`;
@@ -536,7 +537,7 @@ async function loadFiles() {
     fileLogs.value = data.logs;
     fileTotal.value = data.total;
   } catch (err) {
-    ElMessage.error(err.message);
+    toast.error(err.message);
   }
 }
 
@@ -561,7 +562,7 @@ async function clearFiles() {
       type: 'warning',
     });
     const data = await api.clearFileLogs(selectedId.value);
-    ElMessage.success(`清掉了 ${data.removed} 条`);
+    toast.success(`清掉了 ${data.removed} 条`);
     filePage.value = 1;
     loadFiles();
   } catch (_) {
@@ -570,7 +571,7 @@ async function clearFiles() {
 }
 
 function exportFiles() {
-  if (!fileLogs.value.length) return ElMessage.warning('没东西可导。');
+  if (!fileLogs.value.length) return toast.warning('没东西可导。');
   const header = ['时间', '操作', '文件路径', '大小(字节)'];
   const rows = fileLogs.value.map((l) => [l.timestamp, l.operation, l.file_path, l.file_size]);
   const escape = (v) => `"${String(v === null || v === undefined ? '' : v).replace(/"/g, '""')}"`;
@@ -591,7 +592,7 @@ async function loadAudio() {
     audioLogs.value = data.logs;
     if (!audioLatest.value && data.logs.length) audioLatest.value = data.logs[0];
   } catch (err) {
-    ElMessage.error(err.message);
+    toast.error(err.message);
   }
 }
 
@@ -608,9 +609,9 @@ async function loadSettings() {
 async function saveSettings() {
   try {
     await api.saveSettings(selectedId.value, settings.value);
-    ElMessage.success('两边都改了。');
+    toast.success('两边都改了。');
   } catch (err) {
-    ElMessage.error(err.message);
+    toast.error(err.message);
   }
 }
 
@@ -618,7 +619,7 @@ async function saveSettings() {
 
 async function runCommand(cmd) {
   if (!selectedId.value) return;
-  if (!selectedOnline.value) return ElMessage.warning('这台机器离线呢。');
+  if (!selectedOnline.value) return toast.warning('这台机器离线呢。');
 
   if (cmd.key === 'screen_start') return startScreen();
 
@@ -672,7 +673,7 @@ function sendPlain(command, args = {}) {
 async function confirmDialog() {
   const d = textDialog.value;
   const value = d.value.trim();
-  if (!value) return ElMessage.warning('先填点东西。');
+  if (!value) return toast.warning('先填点东西。');
 
   const map = {
     message: { command: 'message', args: { text: value } },
@@ -685,22 +686,22 @@ async function confirmDialog() {
   const payload = map[d.kind];
   d.open = false;
   const ack = await auth.sendCommand(selectedId.value, payload.command, payload.args);
-  if (!ack || !ack.ok) ElMessage.warning('没送出去，机器可能刚好掉线。');
+  if (!ack || !ack.ok) toast.warning('没送出去，机器可能刚好掉线。');
 }
 
 /* -------------------------------- 绑定与设置 -------------------------------- */
 
 async function bind() {
-  if (!bindDialog.value.uid.trim()) return ElMessage.warning('机器 ID 得填。');
+  if (!bindDialog.value.uid.trim()) return toast.warning('机器 ID 得填。');
   bindDialog.value.busy = true;
   try {
     await api.bindClient({ clientUid: bindDialog.value.uid.trim(), name: bindDialog.value.name.trim() });
-    ElMessage.success('绑上了。');
+    toast.success('绑上了。');
     bindDialog.value = { open: false, uid: '', name: '', busy: false };
     await auth.fetchClients();
     if (clients.value.length) selectClient(clients.value[0]);
   } catch (err) {
-    ElMessage.error(err.message);
+    toast.error(err.message);
   } finally {
     bindDialog.value.busy = false;
   }
@@ -715,7 +716,7 @@ async function rename() {
     });
     await api.renameClient(selectedId.value, value);
     await auth.fetchClients();
-    ElMessage.success('改好了。');
+    toast.success('改好了。');
   } catch (_) {
     /* 取消 */
   }
@@ -731,7 +732,7 @@ async function unbind() {
     await api.unbindClient(selectedId.value);
     selectedId.value = null;
     await auth.fetchClients();
-    ElMessage.success('解开了。');
+    toast.success('解开了。');
   } catch (_) {
     /* 取消 */
   }
