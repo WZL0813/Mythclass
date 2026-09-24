@@ -182,9 +182,61 @@ h1, h2, h3 { line-height: 1.28; margin: 0; }
   --el-button-hover-border-color: #3f6b52;
 }
 .el-message { border-radius: 12px; }
-/* 顶部消息最多露「一条半」：第二条裁掉下半截，更后面的排队等前面走完 */
-.el-message.toast-peek {
-  clip-path: inset(0 0 54% 0);
-  opacity: 0.9;
-}
 
+/* ---------------------------- 顶部消息（自己画的那套） ----------------------------
+   容器高度固定「一条半」，内容压到底部：新消息把旧的往上顶，
+   最上面那条被 overflow: hidden 裁掉一半、再上面的整个顶出边界。
+   最下面一条 = 最新的，位置就在平时单条消息出现的地方。 */
+#myth-toasts {
+  --myth-toast-h: 50px;
+  position: fixed;
+  /* 让「最新那条」的上沿正好落在常规位置（78px）：
+     容器高 = 1.5 条 + 10 间隙，最新那条贴在容器底边，
+     所以容器 top = 78 − 半条 − 间隙 */
+  top: calc(78px - var(--myth-toast-h) * 0.5 - 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(440px, 92vw);
+  height: calc(var(--myth-toast-h) * 1.5 + 10px);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 10px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 2200;
+}
+.myth-toast {
+  box-sizing: border-box;
+  height: var(--myth-toast-h);
+  /* 不许被 flex 压扁：压扁了就既不会有「半截」也不会有「顶出去」 */
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 15px;
+  border-radius: 13px;
+  border: 1px solid rgba(143, 168, 142, 0.28);
+  background: color-mix(in srgb, var(--ink) 88%, transparent);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+  color: var(--text);
+  font-size: 13.6px;
+  line-height: 1.4;
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateY(7px);
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+.myth-toast.in { opacity: 1; transform: translateY(0); }
+.myth-toast.out { opacity: 0; transform: translateY(-7px); }
+.myth-toast iconify-icon { font-size: 17px; flex: 0 0 auto; }
+.myth-toast__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.myth-toast--success { border-color: rgba(127, 197, 154, 0.45); }
+.myth-toast--success iconify-icon { color: #7fc59a; }
+.myth-toast--warning { border-color: rgba(232, 183, 120, 0.45); }
+.myth-toast--warning iconify-icon { color: var(--amber); }
+.myth-toast--error { border-color: rgba(214, 130, 120, 0.5); }
+.myth-toast--error iconify-icon { color: #e09080; }
+.myth-toast--info iconify-icon { color: var(--sage); }
