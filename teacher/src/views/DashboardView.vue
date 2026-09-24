@@ -809,10 +809,6 @@ function fmtTime(t) {
         </li>
       </ul>
 
-      <div class="rail-foot">
-        <p class="mono tiny">{{ SERVER_URL || '同源部署' }}</p>
-        <p class="muted tiny">官方：{{ OFFICIAL_SERVER }}</p>
-      </div>
     </aside>
 
     <!-- 右侧：工作区 -->
@@ -1233,7 +1229,6 @@ function fmtTime(t) {
 .cname { margin: 0; font-size: 13.8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cmeta { margin: 2px 0 0; font-size: 11px; color: var(--sage); }
 .cseen { font-size: 11px; color: var(--text-dim); }
-.rail-foot { margin-top: auto; border-top: 1px dashed var(--line); padding-top: 10px; }
 .tiny { font-size: 11px; margin: 2px 0; word-break: break-all; }
 
 /* --------------------------------- 工作区 --------------------------------- */

@@ -2,7 +2,6 @@
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
-import { OFFICIAL_SERVER } from '@/api';
 
 defineProps({ theme: { type: String, default: 'dark' } });
 const emit = defineEmits(['toggle-theme']);
@@ -87,7 +86,6 @@ function logout() {
         </template>
       </div>
     </div>
-    <p class="server-line mono">{{ OFFICIAL_SERVER }}</p>
   </header>
 </template>
 
@@ -194,15 +192,6 @@ function logout() {
 }
 .menu button:hover { background: rgba(243, 239, 227, 0.08); }
 .menu button.danger { color: #eaa79b; }
-
-.server-line {
-  margin: 0;
-  padding: 0 0 6px;
-  text-align: center;
-  font-size: 11px;
-  color: var(--sage);
-  opacity: 0.7;
-}
 
 @media (max-width: 860px) {
   .links { display: none; }
