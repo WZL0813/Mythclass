@@ -100,6 +100,38 @@ router.get('/config', (req, res) => {
   });
 });
 
+/**
+ * 这台机器绑定了哪些老师。
+ *
+ * 一体机起本地网页时要用：页面上显示「本机归属」，
+ * 也顺便知道自己该认谁。客户端只能拉到自己这条绑定，看不到别的机器。
+ */
+router.get('/teachers', (req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT u.id AS user_id, u.username, b.created_at AS bound_at
+         FROM bindings b
+         JOIN users u ON u.id = b.user_id
+        WHERE b.client_id = ?
+        ORDER BY b.created_at`
+    )
+    .all(req.client.id);
+
+  res.json({
+    client: {
+      id: req.client.id,
+      clientUid: req.client.client_uid,
+      name: req.client.name,
+    },
+    teachers: rows.map((r) => ({
+      id: r.user_id,
+      username: r.username,
+      boundAt: r.bound_at,
+    })),
+    serverTime: Date.now(),
+  });
+});
+
 router.post('/heartbeat', (req, res) => {
   const localIps = normalizeLocalIps(req.body && req.body.localIps);
   if (localIps) {

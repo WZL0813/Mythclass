@@ -372,6 +372,38 @@ function applyFrame(payload, fromP2P) {
   lastFrameAt = now;
 }
 
+/** 一体机本地网页的端口（客户端默认值，改客户端配置的话这里也要改） */
+const LAN_WEB_PORT = 26925;
+
+/** 这台机器本地网页的地址，没有内网 IP 就返回空 */
+function lanPageUrl(client) {
+  const ips = (client && client.localIps) || [];
+  const ip = ips.find((x) => /^(10\.|192\.168\.|172\.)/.test(x));
+  return ip ? `http://${ip}:${LAN_WEB_PORT}/` : '';
+}
+
+/** 问一下要不要切到直连（就是打开一体机自己那个页面） */
+async function askDirect(client) {
+  const url = lanPageUrl(client);
+  if (!url) {
+    toast.warning('这台机器还没上报内网地址，先走服务器吧');
+    return false;
+  }
+  try {
+    await ElMessageBox.confirm(
+      `「${client.name || '这台机器'}」和你在同一个局域网。\n` +
+        '切到直连就是打开它自己开的页面，画面直接来自它，不经过服务器。',
+      '要不要切到直连？',
+      { confirmButtonText: '切到直连', cancelButtonText: '继续走服务器', type: 'info' }
+    );
+  } catch (_) {
+    return false; // 老师选了「继续走服务器」
+  }
+  window.open(url, '_blank', 'noopener');
+  toast.success('已在新标签页打开直连页面');
+  return true;
+}
+
 /** 当前这台机器和我是不是同一个局域网（服务端按出口 IP 判的） */
 const sameLan = computed(() => {
   const c = selected.value;
@@ -903,6 +935,15 @@ function fmtTime(t) {
               <Icon icon="ph:house-line" />
               同一局域网
             </span>
+            <button
+              v-if="sameLan"
+              class="lan-go"
+              :title="'打开这台机器自己开的页面（' + lanPageUrl(selected) + '）'"
+              @click="askDirect(selected)"
+            >
+              <Icon icon="ph:arrow-square-out" />
+              走直连
+            </button>
             <span class="mono stat">{{ frameSize || '—' }} · {{ frameFps }} fps</span>
             <span class="mono stat">{{ rtt === null ? '延迟 —' : '延迟 ' + rtt + ' ms' }}</span>
           </div>
@@ -1130,6 +1171,22 @@ function fmtTime(t) {
 </template>
 
 <style scoped>
+/* 「走直连」按钮：跟「同一局域网」标记挨着，点开就是一体机自己的页面 */
+.lan-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border: 1px solid rgba(94, 154, 115, 0.55);
+  border-radius: 999px;
+  background: rgba(94, 154, 115, 0.18);
+  color: #c9e6d2;
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.lan-go:hover { background: rgba(94, 154, 115, 0.3); }
+
 /* 「同一局域网」小标记：跟传输通道药丸并排，别抢眼但要看得见 */
 .lan-chip {
   display: inline-flex;
