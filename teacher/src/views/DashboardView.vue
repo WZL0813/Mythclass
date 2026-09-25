@@ -307,6 +307,58 @@ function selectClient(client) {
 // 用非 trickle ICE（等候选收齐再发完整 SDP），省掉单独的 ice 交换。
 let p2p = null;
 
+/** 手动试直连的时候按钮转圈 */
+const p2pTrying = ref(false);
+
+/** 轮询等一个条件成立（试直连有没有成） */
+function waitFor(check, timeoutMs) {
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const timer = setInterval(() => {
+      if (check()) {
+        clearInterval(timer);
+        resolve(true);
+      } else if (Date.now() - started > timeoutMs) {
+        clearInterval(timer);
+        resolve(false);
+      }
+    }, 200);
+  });
+}
+
+/**
+ * 手动再试一次 P2P 直连。
+ * 自动那次是在「开始看」的时候试的，没成之后不会自己重试 ——
+ * 网络环境变了（比如老师换到同一个网段）就得有个手动重试的口子。
+ */
+async function manualP2P() {
+  if (!selectedId.value) {
+    toast.warning('先选一台机器');
+    return;
+  }
+  if (typeof RTCPeerConnection === 'undefined') {
+    toast.warning('这个浏览器不支持直连');
+    return;
+  }
+  if (p2pTrying.value) return;
+
+  p2pTrying.value = true;
+  try {
+    closeP2P();
+    transport.value = 'idle';
+    toast.info('正在试直连…');
+    startP2P(selectedId.value);
+    const ok = await waitFor(() => transport.value === 'p2p', 9000);
+    if (ok) {
+      toast.success('直连成功，画面不再经过服务器');
+    } else {
+      toast.warning('直连没成，继续走服务器中继');
+    }
+  } finally {
+    p2pTrying.value = false;
+  }
+}
+
 function closeP2P() {
   if (!p2p) return;
   try {
@@ -1031,6 +1083,22 @@ function fmtTime(t) {
               ></iconify-icon>
               {{ transportLabel }}
             </span>
+            <button
+              v-if="selectedId"
+              class="lan-go p2p-try"
+              :disabled="p2pTrying"
+              :title="
+                transport === 'p2p'
+                  ? '现在是直连。点一下可以断开重连再试'
+                  : '手动再试一次 P2P 直连（画面不经过服务器）'
+              "
+              @click="manualP2P()"
+            >
+              <iconify-icon
+                :icon="p2pTrying ? 'ph:spinner-gap' : 'ph:plugs-connected'"
+              ></iconify-icon>
+              {{ p2pTrying ? '正在试…' : transport === 'p2p' ? '重连直连' : '试直连' }}
+            </button>
             <span
               v-if="sameLan"
               class="lan-chip"
@@ -1290,6 +1358,11 @@ function fmtTime(t) {
   cursor: pointer;
 }
 .lan-go:hover { background: rgba(94, 154, 115, 0.3); }
+
+/* 手动试直连那个按钮 */
+.p2p-try { margin-right: 2px; }
+.p2p-try:disabled { opacity: 0.7; cursor: progress; }
+.p2p-try iconify-icon { font-size: 14px; }
 
 /* 「同一局域网」小标记：跟传输通道药丸并排，别抢眼但要看得见 */
 .lan-chip {
