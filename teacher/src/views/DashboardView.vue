@@ -442,11 +442,51 @@ function pickPrivateIp(sdp) {
 /** 这次会话里已经问过「要不要直连」的机器，别反复打扰 */
 const directAsked = new Set();
 
+/** 探一下那个网页通不通（超时 1.5 秒，探不通不算错，只是换种提示） */
+function probeLanPage(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const timer = setTimeout(() => {
+      img.onload = img.onerror = null;
+      resolve(false);
+    }, 1500);
+    img.onload = () => {
+      clearTimeout(timer);
+      resolve(true);
+    };
+    img.onerror = () => {
+      clearTimeout(timer);
+      resolve(true); // 有响应（哪怕是 401/404）就说明端口是通的
+    };
+    img.src = url + 'favicon.ico?_=' + Date.now();
+  });
+}
+
 /** 问一下要不要切到直连（就是打开一体机自己那个页面） */
 async function askDirect(client) {
   const url = lanPageUrl(client);
   if (!url) {
     toast.warning('这台机器还没上报内网地址，先走服务器吧');
+    return false;
+  }
+
+  // 先探一下。探不通就别把人送到 ERR_CONNECTION_REFUSED
+  const alive = await probeLanPage(url);
+  if (!alive) {
+    try {
+      await ElMessageBox.alert(
+        `「${client.name || '这台机器'}」的本地网页打不开（${url}）。\n\n` +
+          '多半是这两种情况：\n' +
+          '· 客户端版本旧了（本地网页要 v2.0.6 以后才有）\n' +
+          '· 客户端没在跑 —— 在那台机器上跑 MythclassClient.exe --status，' +
+          '看「本地网页」那行是不是「开着」\n\n' +
+          '现在照样能看画面，走的是服务器中继。',
+        '这台机器没开本地网页',
+        { confirmButtonText: '知道了', type: 'warning' }
+      );
+    } catch (_) {
+      /* 关掉就算了 */
+    }
     return false;
   }
   try {
