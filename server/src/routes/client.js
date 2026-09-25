@@ -6,6 +6,7 @@
  */
 
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const { db } = require('../db');
 const config = require('../config');
 const { clientAuth, signClientToken } = require('../middleware/auth');
@@ -53,6 +54,62 @@ router.post('/errors', (req, res) => {
 });
 
 /** 客户端第一次跑起来，拿一个长期凭证 */
+/**
+ * 卸载器用来确认「来卸载的人真的是这台机器的老师」。
+ *
+ * 位置必须放在 router.use(clientAuth) 之前：卸载器没有客户端凭证，
+ * 它只有老师输入的用户名和密码。
+ */
+const uninstallAttempts = new Map(); // clientUid -> { count, first }
+
+router.post('/verify-uninstall', (req, res) => {
+  const clientUid = String(req.body.clientUid || '').trim().toUpperCase();
+  const username = String(req.body.username || '').trim();
+  const password = String(req.body.password || '');
+
+  if (!clientUid || !username || !password) {
+    return res.status(400).json({ ok: false, error: 'BAD_REQUEST', message: '参数不全' });
+  }
+
+  // 限流：同一个客户端 10 分钟最多试 5 次
+  const now = Date.now();
+  const window = 10 * 60 * 1000;
+  let record = uninstallAttempts.get(clientUid);
+  if (!record || now - record.first > window) {
+    record = { count: 0, first: now };
+    uninstallAttempts.set(clientUid, record);
+  }
+  if (record.count >= 5) {
+    console.warn(`[Mythclass] 卸载验证试太多次：${clientUid}`);
+    return res.status(429).json({ ok: false, error: 'TOO_MANY', message: '试太多次了，等十分钟' });
+  }
+  record.count += 1;
+
+  const client = db.prepare('SELECT * FROM clients WHERE client_uid = ?').get(clientUid);
+  if (!client) {
+    return res.status(404).json({ ok: false, error: 'CLIENT_NOT_FOUND', message: '没找到这台机器' });
+  }
+
+  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+    console.warn(`[Mythclass] 卸载验证：${clientUid} 密码不对（${username}）`);
+    return res.status(401).json({ ok: false, error: 'BAD_PASSWORD', message: '密码不对' });
+  }
+
+  // 必须是绑定了这台机器的老师
+  const bound = db
+    .prepare('SELECT 1 FROM bindings WHERE client_id = ? AND user_id = ?')
+    .get(client.id, user.id);
+  if (!bound) {
+    console.warn(`[Mythclass] 卸载验证：${username} 没绑定 ${clientUid}`);
+    return res.status(403).json({ ok: false, error: 'NOT_BOUND', message: '这个账号不负责这台机器' });
+  }
+
+  record.count = 0; // 成功了就把计数清掉
+  console.log(`[Mythclass] 卸载验证通过：${clientUid} ← ${username}`);
+  res.json({ ok: true, username: user.username, clientUid });
+});
+
 router.post('/register', (req, res) => {
   const clientUid = String(req.body.clientUid || req.body.client_uid || '').trim().toUpperCase();
   const name = String(req.body.name || '').trim() || null;
