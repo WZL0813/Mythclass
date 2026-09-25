@@ -78,6 +78,27 @@ app.get('/healthz', (req, res) => {
   res.json({ ok: true, ...sockets.stats(), db: config.dbFile });
 });
 
+/**
+ * 部署版本标记，不需要凭证。
+ *
+ * 为什么要有这个：以前想确认「线上跑的是哪一版」只能靠猜 —— 例如探测
+ * /api/client/teachers 拿到 401，分不清是新接口在要凭证，还是全局中间件
+ * 拦下的未知路由。有了它，浏览器打开一次就知道这一版有没有某个能力。
+ */
+app.get('/api/meta', (req, res) => {
+  res.json({
+    service: 'Mythclass 服务端',
+    version: '2.0.6',
+    features: [
+      'client-teachers', // 客户端可拉取绑定老师（本地网页要用）
+      'local-ips', // 记录客户端上报的内网 IP
+      'same-network', // 判定老师与客户端是否同一出口
+      'teacher-ip-tag', // 转发消息带老师真实 IP
+    ],
+    time: new Date().toISOString(),
+  });
+});
+
 // 教师端注册页要用，不需要登录
 app.get('/api/auth/registration-status', (req, res) => {
   res.json({ open: String(getSystemSetting('registration_open', 'true')) === 'true' });
