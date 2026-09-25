@@ -88,12 +88,13 @@ app.get('/healthz', (req, res) => {
 app.get('/api/meta', (req, res) => {
   res.json({
     service: 'Mythclass 服务端',
-    version: '2.0.6',
+    version: '2.2.0',
     features: [
       'client-teachers', // 客户端可拉取绑定老师（本地网页要用）
       'local-ips', // 记录客户端上报的内网 IP
       'same-network', // 判定老师与客户端是否同一出口
       'teacher-ip-tag', // 转发消息带老师真实 IP
+      'lan-key', // 存本机局域网密钥，教师端拼「带密钥的直连链接」
     ],
     time: new Date().toISOString(),
   });
