@@ -539,6 +539,20 @@ function pickPrivateIp(sdp) {
 /** 这次会话里已经问过「要不要直连」的机器，别反复打扰 */
 const directAsked = new Set();
 
+/** 局域网控制台的完整地址（带密钥）与密钥本身，方便复制 */
+const lanConsoleUrl = computed(() => (selected.value ? lanPageUrl(selected.value) : ''));
+const lanKeyText = computed(() => (selected.value && selected.value.lanKey) || '');
+
+async function copyText(value) {
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+    toast.success('复制好了');
+  } catch (_) {
+    toast.warning('浏览器不让复制，手动选中吧');
+  }
+}
+
 /**
  * 通知编辑框。
  * 选项按位置决定样子（主人定的）：第一个高亮、第二个普通、第三个是输入框；
@@ -548,6 +562,13 @@ const notice = ref({
   open: false,
   topmost: true,
   fullscreen: false,
+  // 窗口大小与字号都能自定义；勾了自适应就按内容算，最多到屏幕的九成
+  autoFit: false,
+  w: 520,
+  h: 300,
+  fontTitle: 16,
+  fontBody: 12,
+  fontButton: 10,
   title: '',
   body: '',
   opts: [
@@ -563,12 +584,18 @@ function openNotice() {
     open: true,
     topmost: true,
     fullscreen: false,
+    autoFit: false,
+    w: 520,
+    h: 300,
+    fontTitle: 16,
+    fontBody: 12,
+    fontButton: 10,
     title: '',
     body: '',
     opts: [
-      { on: true, label: '知道了' },
-      { on: false, label: '' },
-      { on: false, label: '' },
+      { on: true, label: '知道了', send: '' },
+      { on: false, label: '', send: '' },
+      { on: false, label: '', send: '' },
     ],
   };
 }
@@ -588,6 +615,13 @@ async function sendNotice() {
     body: n.body.trim() || n.title.trim(),
     topmost: n.topmost,
     fullscreen: n.fullscreen,
+    autoFit: n.autoFit,
+    size: { w: Number(n.w) || 520, h: Number(n.h) || 300 },
+    fontSize: {
+      title: Number(n.fontTitle) || 16,
+      body: Number(n.fontBody) || 12,
+      button: Number(n.fontButton) || 10,
+    },
     options,
   });
   notice.value.open = false;
@@ -1114,6 +1148,29 @@ function fmtTime(t) {
         <textarea class="nt-input" v-model="notice.body" rows="3" maxlength="300"
                   placeholder="比如：请把作业交到讲台，交完再看书。"></textarea>
 
+        <p class="nt-label">窗口大小与字号</p>
+        <div class="nt-grid">
+          <label class="nt-mini">宽
+            <input class="nt-input" type="number" v-model.number="notice.w" min="320" max="2400" :disabled="notice.autoFit" />
+          </label>
+          <label class="nt-mini">高
+            <input class="nt-input" type="number" v-model.number="notice.h" min="180" max="1600" :disabled="notice.autoFit" />
+          </label>
+          <label class="nt-mini">标题字号
+            <input class="nt-input" type="number" v-model.number="notice.fontTitle" min="9" max="72" />
+          </label>
+          <label class="nt-mini">内容字号
+            <input class="nt-input" type="number" v-model.number="notice.fontBody" min="8" max="60" />
+          </label>
+          <label class="nt-mini">按钮字号
+            <input class="nt-input" type="number" v-model.number="notice.fontButton" min="8" max="40" />
+          </label>
+        </div>
+        <label class="nt-row" style="margin-top:8px">
+          <input type="checkbox" v-model="notice.autoFit" />
+          <span>自适应窗口最大（按内容算，最多到屏幕九成）</span>
+        </label>
+
         <p class="nt-label">回复选项（最多三个，勾上才显示）</p>
         <div v-for="(o, i) in notice.opts" :key="i" class="nt-opt">
           <label class="nt-row">
@@ -1485,6 +1542,31 @@ function fmtTime(t) {
               <button class="btn small danger" @click="logout"><iconify-icon icon="ph:sign-out"></iconify-icon>退出登录</button>
             </div>
           </div>
+
+          <div class="card">
+            <h3>局域网访问</h3>
+            <p class="muted tiny">
+              同一局域网里直接开这个地址就能控制这台机器，不经过服务器。
+              一键跳转会带上密钥，下面也能手动复制。
+            </p>
+            <div class="lan-line">
+              <span class="mono">{{ lanConsoleUrl || '（这台机器还没上报内网地址）' }}</span>
+              <button class="btn small" :disabled="!lanConsoleUrl" @click="copyText(lanConsoleUrl)">
+                <iconify-icon icon="ph:link"></iconify-icon>复制地址
+              </button>
+            </div>
+            <div class="lan-line">
+              <span class="mono">密钥 {{ lanKeyText || '—' }}</span>
+              <button class="btn small" :disabled="!lanKeyText" @click="copyText(lanKeyText)">
+                <iconify-icon icon="ph:key"></iconify-icon>复制密钥
+              </button>
+            </div>
+            <div class="row" style="margin-top:10px">
+              <button class="btn small primary" :disabled="!lanConsoleUrl" @click="openLanConsole(selected)">
+                <iconify-icon icon="ph:monitor-play"></iconify-icon>现在打开
+              </button>
+            </div>
+          </div>
         </div>
       </template>
     </section>
@@ -1570,6 +1652,13 @@ function fmtTime(t) {
 }
 .nt-slot { color: var(--sage); font-size: 12.5px; }
 .nt-col { display: grid; gap: 6px; }
+.nt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+.nt-mini { display: grid; gap: 4px; font-size: 12px; color: var(--sage); }
+.lan-line {
+  display: flex; align-items: center; gap: 8px; justify-content: space-between;
+  margin-top: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px;
+  background: rgba(15, 22, 19, 0.6); font-size: 12.5px; word-break: break-all;
+}
 .nt-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 .btn.gh { background: transparent; border: 1px solid var(--line); color: var(--sage); }
 .btn.pm { background: #3f6b52; border: 1px solid #4c7d61; color: #f1f6ef; }
