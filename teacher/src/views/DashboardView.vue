@@ -1168,7 +1168,7 @@ function fmtTime(t) {
         </div>
         <label class="nt-row" style="margin-top:8px">
           <input type="checkbox" v-model="notice.autoFit" />
-          <span>自适应窗口最大（按内容算，最多到屏幕九成）</span>
+          <span>自适应窗口最大（把文字按比例拉到屏幕能放的最大）</span>
         </label>
 
         <p class="nt-label">回复选项（最多三个，勾上才显示）</p>
