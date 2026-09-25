@@ -11,6 +11,33 @@ const router = useRouter();
 const auth = useAuthStore();
 const menuOpen = ref(false);
 
+// 导航栏收起来：省空间用。状态存本地，刷新后保持
+const NAV_KEY = 'mythclass.nav.tucked';
+const navTucked = ref(localStorage.getItem(NAV_KEY) === '1');
+// 刷新后保持：挂载时把标记也补上
+if (navTucked.value) {
+  try {
+    document.documentElement.classList.add('nav-tucked');
+  } catch (_) {
+    /* 无所谓 */
+  }
+}
+
+function setTucked(value) {
+  navTucked.value = value;
+  // 顺便在 html 上标记一下，好让页面把顶上那 62px 也省掉
+  try {
+    document.documentElement.classList.toggle('nav-tucked', value);
+  } catch (_) {
+    /* 无所谓 */
+  }
+  try {
+    localStorage.setItem(NAV_KEY, value ? '1' : '0');
+  } catch (_) {
+    /* 存不了就算了 */
+  }
+}
+
 // 有 token 就算已登录。
 // 之前还要求 user 存在，导致「带着 token 刷新首页」时导航栏又退回未登录的样子。
 const loggedIn = computed(() => auth.isLoggedIn);
@@ -57,7 +84,12 @@ function logout() {
 </script>
 
 <template>
-  <header class="nav">
+  <header class="nav" :class="{ tucked: navTucked }">
+    <!-- 收起来之后留个小把手，点一下伸回来 -->
+    <button v-if="navTucked" class="nav-handle" title="把导航栏拉回来" @click="setTucked(false)">
+      <iconify-icon icon="ph:caret-down"></iconify-icon>
+      导航
+    </button>
     <div class="nav-inner">
       <button class="logo" @click="go('/')">
         <img class="mark" src="/logo-mark.png" alt="Mythclass" />
@@ -70,6 +102,9 @@ function logout() {
       </nav>
 
       <div class="right">
+        <button class="icon-btn" title="收起导航栏（省点地方）" @click="setTucked(true)">
+          <iconify-icon icon="ph:caret-double-up"></iconify-icon>
+        </button>
         <button class="icon-btn" :title="theme === 'dark' ? '换成浅色' : '换成深色'" @click="emit('toggle-theme')">
           <iconify-icon :icon="theme === 'dark' ? 'ph:sun' : 'ph:moon-stars'"></iconify-icon>
         </button>
@@ -96,6 +131,33 @@ function logout() {
 </template>
 
 <style scoped>
+/* 收起来的导航栏：整条滑出屏幕上方 */
+.nav.tucked {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 收起后留在左上角的小把手 —— 不然就找不回来了 */
+.nav-handle {
+  position: fixed;
+  top: 10px;
+  left: 14px;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(143, 168, 142, 0.28);
+  background: color-mix(in srgb, var(--ink) 82%, transparent);
+  color: #e8efe6;
+  font-size: 12.5px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+.nav-handle:hover { border-color: rgba(94, 154, 115, 0.55); color: #c9e6d2; }
+
 .nav {
   position: fixed;
   top: 0;

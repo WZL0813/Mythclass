@@ -16,6 +16,34 @@ const tab = ref('screen');
 const selectedId = ref(null);
 const loading = ref(true);
 
+/**
+ * 左右两栏收起来 / 放出来。
+ * 都是「缩进屏幕外」：列宽收成 0、面板淡出，边上留个小把手拉回来。
+ * 状态存本地，刷新后保持。
+ */
+const RAIL_KEY = 'mythclass.dash.rail';
+const EVENTS_KEY = 'mythclass.dash.events';
+const railOpen = ref(localStorage.getItem(RAIL_KEY) !== '0');
+const eventsOpen = ref(localStorage.getItem(EVENTS_KEY) !== '0');
+
+function toggleRail(open) {
+  railOpen.value = open;
+  try {
+    localStorage.setItem(RAIL_KEY, open ? '1' : '0');
+  } catch (_) {
+    /* 存不了就算了 */
+  }
+}
+
+function toggleEvents(open) {
+  eventsOpen.value = open;
+  try {
+    localStorage.setItem(EVENTS_KEY, open ? '1' : '0');
+  } catch (_) {
+    /* 存不了就算了 */
+  }
+}
+
 const frameSrc = ref('');
 const frameFps = ref(0);
 const frameSize = ref('');
@@ -978,9 +1006,19 @@ function fmtTime(t) {
 </script>
 
 <template>
-  <div class="dash">
+  <div class="dash" :class="{ 'rail-off': !railOpen, 'events-off': !eventsOpen }">
     <!-- 背后的星光，和登录过场同一片 -->
     <StarBackdrop />
+
+    <!-- 两边收起来之后，留在屏幕边上的小把手 —— 不点它就回不来了 -->
+    <button v-if="!railOpen" class="edge-tab left" title="展开「我的机器」" @click="toggleRail(true)">
+      <iconify-icon icon="ph:caret-right"></iconify-icon>
+      机器
+    </button>
+    <button v-if="!eventsOpen" class="edge-tab right" title="展开「事件 / 消息」" @click="toggleEvents(true)">
+      事件
+      <iconify-icon icon="ph:caret-left"></iconify-icon>
+    </button>
 
     <!-- 顶部工具条 -->
     <div class="top-bar">
@@ -1001,9 +1039,14 @@ function fmtTime(t) {
     <aside class="rail">
       <div class="rail-head">
         <p class="eyebrow">我的机器</p>
-        <button class="btn small primary" @click="bindDialog.open = true">
-          <iconify-icon icon="ph:plus"></iconify-icon>绑定
-        </button>
+        <div class="rail-acts">
+          <button class="btn small primary" @click="bindDialog.open = true">
+            <iconify-icon icon="ph:plus"></iconify-icon>绑定
+          </button>
+          <button class="icon-mini" title="收起这一栏（省地方）" @click="toggleRail(false)">
+            <iconify-icon icon="ph:caret-double-left"></iconify-icon>
+          </button>
+        </div>
       </div>
 
       <p class="rail-sum mono">{{ clients.length }} 台 · 在线 {{ auth.onlineCount }}</p>
@@ -1328,6 +1371,9 @@ function fmtTime(t) {
       <div class="ev-tabs">
         <button :class="['ev-tab', { active: evTab === 'event' }]" @click="evTab = 'event'">事件</button>
         <button :class="['ev-tab', { active: evTab === 'message' }]" @click="evTab = 'message'">消息</button>
+        <button class="icon-mini ev-fold" title="收起这一栏（省地方）" @click="toggleEvents(false)">
+          <iconify-icon icon="ph:caret-double-right"></iconify-icon>
+        </button>
       </div>
       <ul class="ev-list">
         <li v-for="(e, i) in evList" :key="i">
@@ -1460,10 +1506,61 @@ function fmtTime(t) {
 .dash {
   position: relative;
   display: grid;
-  grid-template-columns: 296px minmax(0, 1fr) 268px;
+  grid-template-columns: var(--rail-w, 296px) minmax(0, 1fr) var(--ev-w, 268px);
   grid-template-rows: auto minmax(0, 1fr);
   min-height: calc(100vh - 62px);
+  transition: grid-template-columns 0.28s ease;
 }
+/* 缩进屏幕外：列宽收成 0，面板淡出 */
+.dash.rail-off { --rail-w: 0px; }
+.dash.events-off { --ev-w: 0px; }
+.dash.rail-off .rail,
+.dash.events-off .events {
+  overflow: hidden;
+  padding-left: 0;
+  padding-right: 0;
+  border-width: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+/* 收起来之后留在屏幕边上的把手 —— 不点它就回不来了 */
+.edge-tab {
+  position: absolute;
+  top: 64px;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 7px;
+  border: 1px solid rgba(143, 168, 142, 0.28);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 78%, transparent);
+  color: #cfe0cc;
+  font-size: 12px;
+  writing-mode: vertical-rl;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+.edge-tab:hover { border-color: rgba(94, 154, 115, 0.55); color: #c9e6d2; }
+.edge-tab.left { left: 6px; }
+.edge-tab.right { right: 6px; }
+/* 面板头上的小按钮（绑定旁边那个收起） */
+.rail-acts { display: flex; align-items: center; gap: 6px; }
+.icon-mini {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid rgba(143, 168, 142, 0.22);
+  background: transparent;
+  color: var(--sage);
+  cursor: pointer;
+}
+.icon-mini:hover { color: var(--text); border-color: rgba(94, 154, 115, 0.5); }
+.ev-fold { margin-left: auto; }
 
 /* ------------------------------ 顶部工具条 ------------------------------ */
 .top-bar {

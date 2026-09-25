@@ -66,4 +66,9 @@ onMounted(async () => {
 .app-main.is-dashboard {
   padding-top: 62px;
 }
+/* 导航栏收起来时，顶上那 62px 也一起省掉（这才叫真省空间） */
+html.nav-tucked .app-main,
+html.nav-tucked .app-main.is-dashboard {
+  padding-top: 0;
+}
 </style>
