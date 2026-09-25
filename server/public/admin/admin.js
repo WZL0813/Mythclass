@@ -109,20 +109,108 @@ function switchTab(tab) {
   document.querySelectorAll('.nav-item').forEach((btn) => {
     btn.classList.toggle('is-active', btn.dataset.tab === tab);
   });
-  ['dashboard', 'users', 'clients', 'settings'].forEach((t) => {
+  ['dashboard', 'users', 'clients', 'settings', 'releases'].forEach((t) => {
     $(`#tab-${t}`).hidden = t !== tab;
   });
   $('#tab-title').textContent = {
     dashboard: '仪表盘',
     users: '用户管理',
     clients: '客户端管理',
+    releases: '发布更新',
     settings: '系统设置',
   }[tab];
 
   if (tab === 'dashboard') loadDashboard();
   if (tab === 'users') loadUsers();
   if (tab === 'clients') loadClients();
+  if (tab === 'releases') loadReleases();
   if (tab === 'settings') loadSettings();
+}
+
+/* -------------------------------- 发布更新 -------------------------------- */
+
+function relEscape(text) {
+  return String(text == null ? '' : text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+async function loadReleases() {
+  const table = $('#rel-table');
+  if (!table) return;
+  try {
+    const data = await api('/releases');
+    const items = data.items || [];
+    table.innerHTML =
+      '<thead><tr><th style="width:90px">版本</th><th>下载地址</th><th style="width:150px">发布时间</th><th style="width:110px">操作</th></tr></thead>' +
+      '<tbody>' +
+      (items.length
+        ? items
+            .map(
+              (r) =>
+                `<tr><td class="mono">v${relEscape(r.version)}${r.mandatory ? ' · 强制' : ''}</td>` +
+                `<td class="mono small">${relEscape(r.url)}</td>` +
+                `<td class="mono small">${relEscape((r.created_at || '').slice(0, 16).replace('T', ' '))}</td>` +
+                `<td><button class="btn ghost small" data-del="${r.id}">删掉</button></td></tr>`
+            )
+            .join('')
+        : '<tr><td colspan="4" class="muted">还没发布过。</td></tr>') +
+      '</tbody>';
+    table.querySelectorAll('[data-del]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        if (!window.confirm('删掉这条发布？删了客户端就查不到这个版本了。')) return;
+        await api(`/releases/${b.dataset.del}`, { method: 'DELETE' });
+        loadReleases();
+      });
+    });
+  } catch (err) {
+    table.innerHTML = `<tbody><tr><td class="muted">拉列表失败：${relEscape(err.message)}</td></tr></tbody>`;
+  }
+}
+
+async function publishRelease() {
+  const msg = $('#rel-msg');
+  const version = $('#rel-version').value.trim();
+  const url = $('#rel-url').value.trim();
+  const notes = $('#rel-notes').value.trim();
+  const sha256 = $('#rel-sha256').value.trim();
+  const mandatory = $('#rel-mandatory').value === '1';
+
+  msg.className = 'msg';
+  if (!version) {
+    msg.textContent = '版本号得写';
+    msg.classList.add('bad');
+    return;
+  }
+  if (!/^https?:\/\//i.test(url)) {
+    msg.textContent = '下载地址要用 http(s) 开头';
+    msg.classList.add('bad');
+    return;
+  }
+
+  try {
+    const data = await api('/releases', {
+      method: 'POST',
+      body: { version, url, notes, sha256, mandatory },
+    });
+    msg.textContent = data.message || '发布好了';
+    $('#rel-version').value = '';
+    $('#rel-url').value = '';
+    $('#rel-notes').value = '';
+    $('#rel-sha256').value = '';
+    loadReleases();
+  } catch (err) {
+    msg.textContent = err.message || '发布失败';
+    msg.classList.add('bad');
+  }
+}
+
+function wireReleases() {
+  const pub = $('#rel-publish');
+  const ref = $('#rel-refresh');
+  if (pub) pub.addEventListener('click', publishRelease);
+  if (ref) ref.addEventListener('click', loadReleases);
 }
 
 /* -------------------------------- 启动 -------------------------------- */
@@ -585,3 +673,5 @@ boot().catch((err) => {
   showLayer('login');
   $('#login-msg').textContent = '连不上服务端，检查一下它是不是没跑。';
 });
+
+wireReleases();

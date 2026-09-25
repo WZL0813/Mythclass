@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import { toast } from '@/utils/toast';
 import { useAuthStore } from '@/stores/auth';
+import { HTTP_BASE } from '@/api';
 import { api, OFFICIAL_SERVER, SERVER_URL } from '@/api';
 import StarBackdrop from '@/components/StarBackdrop.vue';
 
@@ -537,6 +538,87 @@ function pickPrivateIp(sdp) {
 
 /** 这次会话里已经问过「要不要直连」的机器，别反复打扰 */
 const directAsked = new Set();
+
+/**
+ * 发布客户端更新。
+ * 发布是管理员接口，所以要现输一次管理员账号密码 ——
+ * 免得任何一个老师账号都能往所有机器推安装包。
+ */
+const release = ref({
+  version: '',
+  url: '',
+  notes: '',
+  sha256: '',
+  mandatory: false,
+  adminUser: '',
+  adminPass: '',
+  busy: false,
+});
+const releaseList = ref([]);
+
+async function adminToken() {
+  const res = await fetch(`${HTTP_BASE}/api/admin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username: release.value.adminUser.trim(),
+      password: release.value.adminPass,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || '管理员账号或密码不对');
+  return data.token;
+}
+
+async function loadReleases() {
+  try {
+    const res = await fetch(`${HTTP_BASE}/api/admin/releases`, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${await adminToken()}`,
+      },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) releaseList.value = data.items || [];
+  } catch (_) {
+    /* 没输账号密码就不显示列表，不算错 */
+  }
+}
+
+async function publishRelease() {
+  const r = release.value;
+  if (!r.version.trim()) return toast.warning('版本号得写，比如 2.6.1');
+  if (!/^https?:\/\//i.test(r.url.trim())) return toast.warning('下载地址要用 http(s) 开头');
+  if (!r.adminUser.trim() || !r.adminPass) return toast.warning('要管理员账号和密码');
+  r.busy = true;
+  try {
+    const token = await adminToken();
+    const res = await fetch(`${HTTP_BASE}/api/admin/releases`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        version: r.version.trim(),
+        url: r.url.trim(),
+        notes: r.notes.trim(),
+        sha256: r.sha256.trim(),
+        mandatory: r.mandatory,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || '发布失败');
+    toast.success(data.message || '发布好了');
+    r.version = '';
+    r.url = '';
+    r.notes = '';
+    r.sha256 = '';
+    r.mandatory = false;
+    loadReleases();
+  } catch (err) {
+    toast.error(err.message || '发布失败');
+  } finally {
+    r.busy = false;
+  }
+}
 
 /** 局域网控制台的完整地址（带密钥）与密钥本身，方便复制 */
 const lanConsoleUrl = computed(() => (selected.value ? lanPageUrl(selected.value) : ''));
@@ -1682,6 +1764,8 @@ function fmtTime(t) {
 }
 .nt-slot { color: var(--sage); font-size: 12.5px; }
 .nt-col { display: grid; gap: 6px; }
+.rel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 6px 0 2px; }
+.rel-list { margin-top: 10px; }
 .nt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
 .nt-mini { display: grid; gap: 4px; font-size: 12px; color: var(--sage); }
 .lan-line {

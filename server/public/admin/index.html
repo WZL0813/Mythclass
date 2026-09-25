@@ -63,6 +63,7 @@
       <button class="nav-item is-active" data-tab="dashboard"><iconify-icon icon="ph:gauge"></iconify-icon>仪表盘</button>
       <button class="nav-item" data-tab="users"><iconify-icon icon="ph:users-three"></iconify-icon>用户管理</button>
       <button class="nav-item" data-tab="clients"><iconify-icon icon="ph:desktop-tower"></iconify-icon>客户端管理</button>
+      <button class="nav-item" data-tab="releases"><iconify-icon icon="ph:cloud-arrow-up"></iconify-icon>发布更新</button>
       <button class="nav-item" data-tab="settings"><iconify-icon icon="ph:sliders-horizontal"></iconify-icon>系统设置</button>
     </nav>
     <p class="side-foot">不推门，也能巡课。</p>
@@ -113,7 +114,38 @@
     </div>
 
     <!-- 系统设置 -->
-    <div class="tab" id="tab-settings" hidden>
+          <div class="tab" id="tab-releases" hidden>
+        <p class="hint">
+          客户端「检查更新」查的就是这里最新的一条。下载地址写 GitHub 的 release，
+          或者自己服务器上的文件都行 —— 客户端只管照着下。
+        </p>
+
+        <div class="panel">
+          <div class="rel-grid">
+            <label>版本号<input id="rel-version" placeholder="比如 2.7.1"></label>
+            <label>是否强制
+              <select id="rel-mandatory">
+                <option value="0">可以不装</option>
+                <option value="1">必须装</option>
+              </select>
+            </label>
+          </div>
+          <label>下载地址<input id="rel-url" placeholder="https://github.com/WZL0813/Mythclass-Client/releases/download/v2.7.1/MythclassSetup-2.7.1.exe"></label>
+          <label>更新说明（客户端会显示）<textarea id="rel-notes" rows="3" placeholder="这次修了什么、加了什么"></textarea></label>
+          <label>sha256（可留空，填了就校验）<input id="rel-sha256" placeholder="64 位十六进制"></label>
+          <div class="row-actions">
+            <button class="btn primary" id="rel-publish">发布</button>
+            <button class="btn" id="rel-refresh">刷新列表</button>
+          </div>
+          <p class="msg" id="rel-msg"></p>
+        </div>
+
+        <div class="panel table-wrap">
+          <table id="rel-table"></table>
+        </div>
+      </div>
+
+      <div class="tab" id="tab-settings" hidden>
       <div class="panel">
         <h3>注册开关</h3>
         <p class="hint">关掉之后，教师端注册页会直接显示「注册已关闭」。</p>
