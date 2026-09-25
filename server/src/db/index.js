@@ -69,6 +69,20 @@ CREATE TABLE IF NOT EXISTS file_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_file_logs_client_time ON file_logs (client_id, timestamp DESC);
 
+      -- 客户端更新：管理员发布一条，客户端来查最新的一条
+      CREATE TABLE IF NOT EXISTS releases (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        version     TEXT NOT NULL,
+        url         TEXT NOT NULL,
+        notes       TEXT NOT NULL DEFAULT '',
+        sha256      TEXT NOT NULL DEFAULT '',
+        mandatory   INTEGER NOT NULL DEFAULT 0,
+        platform    TEXT NOT NULL DEFAULT 'win',
+        created_at  TEXT NOT NULL,
+        created_by  INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_releases_platform ON releases (platform, id DESC);
+
 CREATE TABLE IF NOT EXISTS audio_logs (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   client_id    INTEGER NOT NULL,

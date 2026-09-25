@@ -9,10 +9,25 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { db } = require('../db');
 const config = require('../config');
-const { clientAuth, signClientToken } = require('../middleware/auth');
+const { clientAuth, signClientToken, clientIp } = require('../middleware/auth');
 const presence = require('../sockets');
 
 const router = express.Router();
+
+// 查更新是公开接口，简单限流：一台机器一分钟最多 10 次
+const updateHits = new Map();
+function updaterLimit(req, res, next) {
+  const key = clientIp(req) || req.ip || 'unknown';
+  const now = Date.now();
+  const list = (updateHits.get(key) || []).filter((t) => now - t < 60000);
+  if (list.length >= 10) {
+    return res.status(429).json({ error: 'TOO_MANY', message: '查得太勤了，等会儿再试' });
+  }
+  list.push(now);
+  updateHits.set(key, list);
+  next();
+}
+
 
 /** 客户端可能报好几个网卡地址，只收内网段、最多 8 个 */
 function normalizeLocalIps(raw) {
@@ -61,6 +76,60 @@ router.post('/errors', (req, res) => {
  * 它只有老师输入的用户名和密码。
  */
 const uninstallAttempts = new Map(); // clientUid -> { count, first }
+
+/**
+ * 客户端查更新。公开接口（客户端还没登录也可能要查），所以限流。
+ * 版本比大小：只认数字段，2.6.0 > 2.5.10 这种也对。
+ */
+function parseVersion(text) {
+  if (!text) return null;
+  const parts = String(text).trim().replace(/^v/i, '').split('.');
+  const nums = [];
+  for (const p of parts) {
+    const digits = String(p).replace(/\D/g, '');
+    if (digits === '') return null;
+    nums.push(Number(digits));
+  }
+  return nums.length ? nums : null;
+}
+
+function compareVersion(a, b) {
+  if (!a || !b) return 0;
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i += 1) {
+    const x = a[i] || 0;
+    const y = b[i] || 0;
+    if (x !== y) return x > y ? 1 : -1;
+  }
+  return 0;
+}
+
+router.get('/update', updaterLimit, (req, res) => {
+  const current = String(req.query.version || '').trim();
+  const platform = String(req.query.platform || 'win').trim() || 'win';
+  const row = db
+    .prepare('SELECT * FROM releases WHERE platform = ? ORDER BY id DESC LIMIT 1')
+    .get(platform);
+
+  if (!row) {
+    return res.json({ update: false, current, latest: current, message: '还没有发布过更新' });
+  }
+
+  const mine = parseVersion(current);
+  const theirs = parseVersion(row.version);
+  const newer = mine && theirs ? compareVersion(theirs, mine) > 0 : false;
+
+  res.json({
+    update: newer,
+    current,
+    latest: row.version,
+    url: newer ? row.url : '',
+    notes: newer ? row.notes : '',
+    sha256: newer ? row.sha256 : '',
+    mandatory: newer ? !!row.mandatory : false,
+    publishedAt: row.created_at,
+  });
+});
 
 router.post('/verify-uninstall', (req, res) => {
   const clientUid = String(req.body.clientUid || '').trim().toUpperCase();

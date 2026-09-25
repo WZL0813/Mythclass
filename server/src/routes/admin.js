@@ -413,4 +413,51 @@ router.get('/export', (req, res) => {
   res.json({ exportedAt: new Date().toISOString(), type, count: rows.length, rows });
 });
 
+// --------------------------------- 发布更新 --------------------------------
+// 发布一条客户端更新。下载地址随便写：GitHub release 也行、自己服务器上的文件也行。
+router.get('/releases', (req, res) => {
+  const rows = db
+    .prepare('SELECT * FROM releases ORDER BY id DESC LIMIT 50')
+    .all();
+  res.json({ items: rows });
+});
+
+router.post('/releases', (req, res) => {
+  const version = String(req.body.version || '').trim().replace(/^v/i, '');
+  const url = String(req.body.url || '').trim();
+  const notes = String(req.body.notes || '').trim();
+  const sha256 = String(req.body.sha256 || '').trim().toLowerCase();
+  const mandatory = req.body.mandatory ? 1 : 0;
+  const platform = String(req.body.platform || 'win').trim() || 'win';
+
+  if (!/^\d+(\.\d+)*$/.test(version)) {
+    return res.status(400).json({ error: 'BAD_VERSION', message: '版本号要写成 2.6.0 这样' });
+  }
+  if (!/^https?:\/\//i.test(url)) {
+    return res.status(400).json({ error: 'BAD_URL', message: '下载地址要用 http(s) 开头' });
+  }
+
+  const info = db
+    .prepare(
+      `INSERT INTO releases (version, url, notes, sha256, mandatory, platform, created_at, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(version, url, notes, sha256, mandatory, platform, new Date().toISOString(), req.admin && req.admin.id);
+
+  res.json({
+    ok: true,
+    id: info.lastInsertRowid,
+    message: '发布好了：v' + version,
+  });
+});
+
+router.delete('/releases/:id', (req, res) => {
+  const id = Number(req.params.id) || 0;
+  const info = db.prepare('DELETE FROM releases WHERE id = ?').run(id);
+  if (!info.changes) {
+    return res.status(404).json({ error: 'NOT_FOUND', message: '没这条' });
+  }
+  res.json({ ok: true });
+});
+
 module.exports = router;
