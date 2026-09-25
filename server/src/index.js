@@ -57,7 +57,17 @@ app.use((req, res, next) => {
 /* --------------------------- Admin 后台静态页面 --------------------------- */
 
 const adminDir = path.join(__dirname, '..', 'public', 'admin');
-app.use('/admin', express.static(adminDir, { index: false }));
+app.use(
+  '/admin',
+  express.static(adminDir, {
+    index: false,
+    etag: true,
+    // 后台改一版就要立刻生效，别让浏览器（还有前面的 CDN）拿旧的
+    setHeaders(res) {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    },
+  })
+);
 app.get('/admin', (req, res) => res.sendFile(path.join(adminDir, 'index.html')));
 app.get('/admin/', (req, res) => res.sendFile(path.join(adminDir, 'index.html')));
 
