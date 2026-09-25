@@ -117,7 +117,9 @@ const tabs = [
   { key: 'screen', label: '屏幕', icon: 'ph:monitor' },
   { key: 'audio', label: '音频', icon: 'ph:speaker-high' },
   { key: 'files', label: '文件记录', icon: 'ph:file-text' },
-  { key: 'command', label: '命令', icon: 'ph:terminal-window' },
+  { key: 'command', label: '命令', icon: 'ph:terminal-window' },  { key: 'usage', label: '使用时长', icon: 'ph:timer' },
+  { key: 'disk', label: '磁盘', icon: 'ph:folders' },
+  { key: 'window', label: '窗口', icon: 'ph:app-window' },
   { key: 'settings', label: '设置', icon: 'ph:sliders-horizontal' },
 ];
 
@@ -163,9 +165,12 @@ const quickTools = computed(() => [
     label: controlMode.value ? '退出控制' : '远程控制',
     icon: 'ph:cursor-click',
     run: () => (controlMode.value = !controlMode.value),
-  },
+  },    { key: 'open_app', label: '开程序', icon: 'ph:app-window', run: () => askOpen('app') },
+  { key: 'open_url', label: '开网页', icon: 'ph:globe', run: () => askOpen('url') },
+  { key: 'quiet', label: '黑屏安静', icon: 'ph:monitor-slash', run: () => askQuiet() },
+  { key: 'quiet_off', label: '取消黑屏', icon: 'ph:monitor', run: () => sendQuiet(false) },
+  { key: 'hand', label: '举手', icon: 'ph:hand-palm', run: () => askHand() },
   { key: 'lock', label: '锁屏', icon: 'ph:lock', run: () => runCommand(commands[0]) },
-  { key: 'unlock', label: '解锁', icon: 'ph:lock-open', run: () => runCommand(commands[1]) },
   { key: 'message', label: '弹消息', icon: 'ph:chat-centered-text', run: () => runCommand(commands[5]) },
   { key: 'broadcast', label: '演示广播', icon: 'ph:broadcast', run: () => runCommand(commands[9]) },
   { key: 'ban', label: '禁止上网', icon: 'ph:prohibit', run: () => runCommand(commands[10]) },
@@ -230,6 +235,12 @@ onMounted(async () => {
       if (!payload || payload.clientId !== selectedId.value) return;
       commandLog.value.unshift(payload);
       if (commandLog.value.length > 40) commandLog.value.pop();
+
+      // 学生举手：客户端会推一条 command='hand' 的 command_result
+      if (payload.command === 'hand') {
+        onHandNotice(payload);
+        return;
+      }
 
       // 通知的回答：客户端会补一条 output 以「回答：」开头的 command_result
       if (
@@ -538,6 +549,166 @@ function pickPrivateIp(sdp) {
 
 /** 这次会话里已经问过「要不要直连」的机器，别反复打扰 */
 const directAsked = new Set();
+
+/* ---------------------- 使用时长 / 磁盘 / 窗口 ---------------------- */
+
+const usageRows = ref([]);
+const diskRows = ref([]);
+const diskPath = ref('C:\\');
+const diskParent = ref('');
+const winRows = ref([]);
+const dataBusy = ref(false);
+
+/** 命令回来的 output 是 JSON，解一下 */
+function formatSeconds(seconds) {
+  const n = Math.round(Number(seconds) || 0);
+  if (n < 60) return n + ' 秒';
+  if (n < 3600) return Math.floor(n / 60) + ' 分 ' + (n % 60) + ' 秒';
+  return Math.floor(n / 3600) + ' 小时 ' + Math.floor((n % 3600) / 60) + ' 分';
+}
+
+function formatSize(bytes) {
+  const n = Number(bytes) || 0;
+  if (n >= 1073741824) return (n / 1073741824).toFixed(1) + ' GB';
+  if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+  if (n >= 1024) return (n / 1024).toFixed(0) + ' KB';
+  return n + ' B';
+}
+
+function parseOut(ack) {
+  try {
+    return JSON.parse((ack && ack.output) || '{}');
+  } catch (_) {
+    return {};
+  }
+}
+
+async function loadUsage() {
+  if (!selectedId.value) return;
+  dataBusy.value = true;
+  try {
+    const data = parseOut(await auth.sendCommand(selectedId.value, 'usage_stats', { limit: 40 }));
+    usageRows.value = data.items || [];
+  } catch (err) {
+    toast.warning(err.message || '拉不到使用时长');
+  } finally {
+    dataBusy.value = false;
+  }
+}
+
+async function loadDisk(where) {
+  if (!selectedId.value) return;
+  dataBusy.value = true;
+  try {
+    const path = where || diskPath.value || 'C:\\';
+    const data = parseOut(await auth.sendCommand(selectedId.value, 'list_dir', { path }));
+    if (!data.items) {
+      toast.warning(data.message || '看不了这个目录');
+      return;
+    }
+    diskPath.value = data.path;
+    diskParent.value = data.parent || '';
+    diskRows.value = data.items || [];
+  } catch (err) {
+    toast.warning(err.message || '看不了这个目录');
+  } finally {
+    dataBusy.value = false;
+  }
+}
+
+function diskInto(name) {
+  const sep = diskPath.value.endsWith('\\') ? '' : '\\';
+  loadDisk(diskPath.value + sep + name);
+}
+
+function diskDownload(row) {
+  toast.info(`要下载「${row.name}」得在局域网控制台那边点，教师端这条通道只传文本`);
+}
+
+async function loadWindows() {
+  if (!selectedId.value) return;
+  dataBusy.value = true;
+  try {
+    const data = parseOut(await auth.sendCommand(selectedId.value, 'list_windows', {}));
+    winRows.value = data.items || [];
+  } catch (err) {
+    toast.warning(err.message || '拉不到窗口');
+  } finally {
+    dataBusy.value = false;
+  }
+}
+
+async function closeWindow(row) {
+  try {
+    await ElMessageBox.confirm(`关掉「${row.title}」？`, '关窗口', {
+      confirmButtonText: '关掉',
+      cancelButtonText: '算了',
+      type: 'warning',
+    });
+  } catch (_) {
+    return;
+  }
+  const ack = await auth.sendCommand(selectedId.value, 'close_window', { hwnd: row.hwnd });
+  toast.info((ack && ack.output) || '发过去了');
+  loadWindows();
+}
+
+/** 开程序 / 开网页 */
+async function askOpen(kind) {
+  const isApp = kind === 'app';
+  try {
+    const { value } = await ElMessageBox.prompt(
+      isApp ? '写程序名或完整路径，比如 notepad.exe' : '写网址，比如 https://www.baidu.com',
+      isApp ? '开程序' : '开网页',
+      { confirmButtonText: '打开', cancelButtonText: '算了' }
+    );
+    const text2 = (value || '').trim();
+    if (!text2) return;
+    const ack = await auth.sendCommand(
+      selectedId.value,
+      isApp ? 'open_app' : 'open_url',
+      isApp ? { app: text2 } : { url: text2, text: text2 }
+    );
+    if (ack && ack.ok) toast.success('发出去了');
+    else toast.warning('没发成功');
+  } catch (_) {
+    /* 取消了 */
+  }
+}
+
+/** 黑屏安静 */
+async function askQuiet() {
+  try {
+    const { value } = await ElMessageBox.prompt('黑屏上写点什么？留空就只黑屏', '黑屏安静', {
+      confirmButtonText: '开始',
+      cancelButtonText: '算了',
+      inputValue: '现在是安静时间',
+    });
+    await auth.sendCommand(selectedId.value, 'quiet', { on: true, text: (value || '').trim() });
+    toast.success('黑屏安静开始了，学生叉不掉');
+  } catch (_) {
+    /* 取消了 */
+  }
+}
+
+async function sendQuiet(on) {
+  await auth.sendCommand(selectedId.value, 'quiet', { on });
+  toast.info(on ? '黑屏开始了' : '黑屏结束了');
+}
+
+/** 举手（老师这边看状态、也能清） */
+async function askHand() {
+  const ack = await auth.sendCommand(selectedId.value, 'hand', {});
+  const data = parseOut(ack);
+  toast.info(data.hand ? '这台机器举手了' : '这机器现在没举手');
+}
+
+/** 学生举手时客户端会推一条 command='hand' 的结果过来 */
+function onHandNotice(payload) {
+  const who = selected.value ? selected.value.name || selected.value.clientUid : '一台机器';
+  pushMessage(`${who} ${payload.output || '举手了'}`);
+  toast.info(`${who} ${payload.output || '举手了'}`);
+}
 
 /**
  * 发布客户端更新。
@@ -915,6 +1086,9 @@ function switchTab(key) {
   if (key === 'screen') startScreen();
   if (key === 'files') loadFiles();
   if (key === 'audio') loadAudio();
+  if (key === 'usage') loadUsage();
+  if (key === 'disk') loadDisk();
+  if (key === 'window') loadWindows();
   if (key === 'settings') loadSettings();
 }
 
@@ -1618,6 +1792,85 @@ function fmtTime(t) {
           </div>
         </div>
 
+        <!-- 使用时长 -->
+        <div v-show="tab === 'usage'" class="pane">
+          <div class="card">
+            <div class="row" style="justify-content:space-between;align-items:center">
+              <h3 style="margin:0">软件使用时长</h3>
+              <button class="btn small" :disabled="dataBusy" @click="loadUsage">
+                <iconify-icon icon="ph:arrows-clockwise"></iconify-icon>刷新
+              </button>
+            </div>
+            <p class="muted tiny">
+              机器上每 5 秒看一眼前台是哪个程序，攒成这张表。只记「哪个程序、用了多久」。
+            </p>
+            <p v-if="!usageRows.length" class="muted">还没有数据，让那台机器用一会儿再看。</p>
+            <table v-else class="data-table">
+              <thead><tr><th style="width:200px">程序</th><th style="width:120px">用了多久</th><th>最后一次在做什么</th></tr></thead>
+              <tbody>
+                <tr v-for="row in usageRows" :key="row.app">
+                  <td>{{ row.app }}</td>
+                  <td class="mono">{{ formatSeconds(row.seconds) }}</td>
+                  <td class="muted">{{ row.title }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 磁盘 -->
+        <div v-show="tab === 'disk'" class="pane">
+          <div class="card">
+            <h3>磁盘文件</h3>
+            <div class="row" style="margin:10px 0">
+              <input class="text-input" v-model="diskPath" placeholder="C:\ 或 D:\课件" style="flex:1"
+                     @keydown.enter="loadDisk()" />
+              <button class="btn small" :disabled="dataBusy" @click="loadDisk()">进去</button>
+              <button class="btn small" :disabled="!diskParent" @click="loadDisk(diskParent)">上一级</button>
+            </div>
+            <p v-if="!diskRows.length" class="muted">写个路径点「进去」。</p>
+            <table v-else class="data-table">
+              <thead><tr><th>名称</th><th style="width:90px">大小</th><th style="width:140px">改过的时间</th><th style="width:90px">操作</th></tr></thead>
+              <tbody>
+                <tr v-for="row in diskRows" :key="row.name">
+                  <td>{{ row.dir ? '📁 ' : '' }}{{ row.name }}</td>
+                  <td class="mono">{{ row.dir ? '—' : formatSize(row.size) }}</td>
+                  <td class="mono muted">{{ row.mtime }}</td>
+                  <td>
+                    <button v-if="row.dir" class="btn small" @click="diskInto(row.name)">进去</button>
+                    <button v-else class="btn small" @click="diskDownload(row)">下载</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 窗口 -->
+        <div v-show="tab === 'window'" class="pane">
+          <div class="card">
+            <div class="row" style="justify-content:space-between;align-items:center">
+              <h3 style="margin:0">开着的窗口</h3>
+              <button class="btn small" :disabled="dataBusy" @click="loadWindows">
+                <iconify-icon icon="ph:arrows-clockwise"></iconify-icon>刷新
+              </button>
+            </div>
+            <p class="muted tiny">最小化 / 最大化 / 全屏都标出来了，可以直接关掉某一个。</p>
+            <p v-if="!winRows.length" class="muted">点「刷新」看看。</p>
+            <table v-else class="data-table">
+              <thead><tr><th style="width:150px">程序</th><th>窗口标题</th><th style="width:100px">状态</th><th style="width:80px">操作</th></tr></thead>
+              <tbody>
+                <tr v-for="row in winRows" :key="row.hwnd">
+                  <td>{{ row.app }}</td>
+                  <td>{{ row.title }}<span v-if="row.active" class="muted"> · 当前</span></td>
+                  <td class="muted">{{ row.stateText }}</td>
+                  <td><button class="btn small danger" @click="closeWindow(row)">关掉</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <!-- 设置 -->
         <div v-show="tab === 'settings'" class="pane">
           <div class="card">
@@ -1737,6 +1990,15 @@ function fmtTime(t) {
 </template>
 
 <style scoped>
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+.data-table th { text-align: left; color: var(--sage); font-weight: 400; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+.data-table td { padding: 8px; border-bottom: 1px dashed rgba(143, 168, 142, 0.14); word-break: break-all; }
+.data-table tr:hover td { background: rgba(243, 239, 227, 0.03); }
+.text-input {
+  padding: 8px 11px; border-radius: 9px; font: inherit; font-size: 13.5px;
+  background: #0f1613; color: var(--text); border: 1px solid var(--line);
+}
+
 /* 通知编辑框 */
 .notice-mask {
   position: fixed; inset: 0; z-index: 200;
