@@ -63,6 +63,22 @@ const clients = computed(() => auth.clients);
 const selected = computed(() => clients.value.find((c) => c.id === selectedId.value) || null);
 const selectedOnline = computed(() => (selected.value ? !!auth.presence[selected.value.id] : false));
 
+/**
+ * 选中一台同一局域网的一体机时，自动提示一次「建议用它自己跑的那个网页」。
+ * 每台机器每次会话只弹一次，老师选了「先这样」就不再烦他。
+ */
+function suggestDirect(client) {
+  if (!client || client.sameNetwork !== true) return;
+  if (directAsked.has(client.id)) return;
+  directAsked.add(client.id);
+  askDirect(client);
+}
+
+watch(selectedId, (id) => {
+  const picked = clients.value.find((c) => c.id === id);
+  if (picked) setTimeout(() => suggestDirect(picked), 350);
+});
+
 const tabs = [
   { key: 'screen', label: '屏幕', icon: 'ph:monitor' },
   { key: 'audio', label: '音频', icon: 'ph:speaker-high' },
@@ -382,6 +398,9 @@ function lanPageUrl(client) {
   return ip ? `http://${ip}:${LAN_WEB_PORT}/` : '';
 }
 
+/** 这次会话里已经问过「要不要直连」的机器，别反复打扰 */
+const directAsked = new Set();
+
 /** 问一下要不要切到直连（就是打开一体机自己那个页面） */
 async function askDirect(client) {
   const url = lanPageUrl(client);
@@ -391,10 +410,12 @@ async function askDirect(client) {
   }
   try {
     await ElMessageBox.confirm(
-      `「${client.name || '这台机器'}」和你在同一个局域网。\n` +
-        '切到直连就是打开它自己开的页面，画面直接来自它，不经过服务器。',
-      '要不要切到直连？',
-      { confirmButtonText: '切到直连', cancelButtonText: '继续走服务器', type: 'info' }
+      `「${client.name || '这台机器'}」和你在同一个局域网。\n\n` +
+        '建议用它自己跑的那个网页看画面：画面直接来自这台机器，' +
+        '不经过服务器，也不占它的带宽。\n' +
+        `地址是 ${url}`,
+      '建议用一体机自己跑的那个网页',
+      { confirmButtonText: '打开它那个网页', cancelButtonText: '先这样', type: 'info' }
     );
   } catch (_) {
     return false; // 老师选了「继续走服务器」
@@ -480,6 +501,8 @@ async function startScreen(force = false) {
     transport.value = 'idle';
     startStatsProbe();
     startP2P(selectedId.value); // 直连能成就不用占服务端带宽
+    // 兜一次：万一是直接点「开始看」进来的，也能收到那个建议
+    setTimeout(() => suggestDirect(selected.value), 800);
   } else {
     toast.warning('没连上，可能机器离线。');
   }
