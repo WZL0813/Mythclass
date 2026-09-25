@@ -76,6 +76,13 @@ const config = {
   fileLogMaxCount: Number(process.env.FILE_LOG_MAX_COUNT || fileCfg.fileLogMaxCount || 5000),
   fileLogMaxSize: Number(process.env.FILE_LOG_MAX_SIZE || fileCfg.fileLogMaxSize || 200 * 1024 * 1024),
   setupTokenFile: path.join(dataDir, 'admin-setup-token.txt'),
+  // 客户端安装包放这儿：管理员从后台上传，或者手动丢进去都行
+  releasesDir:
+    process.env.MYTHCLASS_RELEASES_DIR ||
+    fileCfg.releasesDir ||
+    path.join(ROOT, 'client', 'releases'),
+  // 服务端对外地址（拼下载链接用）。挂在反代后面最好显式配一下
+  publicUrl: String(process.env.MYTHCLASS_PUBLIC_URL || fileCfg.publicUrl || '').replace(/\/+$/, ''),
   officialServer: 'wss://mythclassapi.ryokuryuneko.top',
   brand: 'Mythclass',
   version: require('../package.json').version,

@@ -104,6 +104,31 @@ function compareVersion(a, b) {
   return 0;
 }
 
+/**
+ * 下载安装包。**只放行「当前那条更新」的文件** ——
+ * 别的文件就算知道名字也拿不到，管理员也能随时删掉。
+ */
+router.get('/download/:name', (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+
+  const name = path.basename(String(req.params.name || ''));
+  const latest = db
+    .prepare('SELECT * FROM releases WHERE platform = ? ORDER BY id DESC LIMIT 1')
+    .get('win');
+
+  if (!latest || !latest.file || latest.file !== name) {
+    return res.status(404).json({ error: 'NOT_AVAILABLE', message: '这个文件不是当前发布的更新' });
+  }
+
+  const dir = config.releasesDir;
+  const full = path.join(dir, name);
+  if (!full.startsWith(dir) || !fs.existsSync(full)) {
+    return res.status(404).json({ error: 'NOT_FOUND', message: '服务端上没有这个文件了' });
+  }
+  res.download(full, name);
+});
+
 router.get('/update', updaterLimit, (req, res) => {
   const current = String(req.query.version || '').trim();
   const platform = String(req.query.platform || 'win').trim() || 'win';
@@ -119,11 +144,18 @@ router.get('/update', updaterLimit, (req, res) => {
   const theirs = parseVersion(row.version);
   const newer = mine && theirs ? compareVersion(theirs, mine) > 0 : false;
 
+  // 服务端托管的文件：拼一个指向本服务器的下载地址
+  let url = row.url || '';
+  if (row.file) {
+    const base = config.publicUrl || `${req.protocol}://${req.get('host')}`;
+    url = `${base}/api/client/download/${encodeURIComponent(row.file)}`;
+  }
+
   res.json({
     update: newer,
     current,
     latest: row.version,
-    url: newer ? row.url : '',
+    url: newer ? url : '',
     notes: newer ? row.notes : '',
     sha256: newer ? row.sha256 : '',
     mandatory: newer ? !!row.mandatory : false,

@@ -123,7 +123,10 @@ function switchTab(tab) {
   if (tab === 'dashboard') loadDashboard();
   if (tab === 'users') loadUsers();
   if (tab === 'clients') loadClients();
-  if (tab === 'releases') loadReleases();
+  if (tab === 'releases') {
+    loadReleases();
+    loadFiles();
+  }
   if (tab === 'settings') loadSettings();
 }
 
@@ -175,7 +178,9 @@ async function publishRelease() {
   const url = $('#rel-url').value.trim();
   const notes = $('#rel-notes').value.trim();
   const sha256 = $('#rel-sha256').value.trim();
+  const picked = $('#rel-file') ? $('#rel-file').value : '';
   const mandatory = $('#rel-mandatory').value === '1';
+  const file = $('#rel-file') ? $('#rel-file').value : '';
 
   msg.className = 'msg';
   if (!version) {
@@ -183,8 +188,8 @@ async function publishRelease() {
     msg.classList.add('bad');
     return;
   }
-  if (!/^https?:\/\//i.test(url)) {
-    msg.textContent = '下载地址要用 http(s) 开头';
+  if (!picked && !/^https?:\/\//i.test(url)) {
+    msg.textContent = '要么选一个服务端上的文件，要么填 http(s) 地址';
     msg.classList.add('bad');
     return;
   }
@@ -192,14 +197,16 @@ async function publishRelease() {
   try {
     const data = await api('/releases', {
       method: 'POST',
-      body: { version, url, notes, sha256, mandatory },
+      body: { version, url, notes, sha256, mandatory, file: picked },
     });
     msg.textContent = data.message || '发布好了';
     $('#rel-version').value = '';
     $('#rel-url').value = '';
     $('#rel-notes').value = '';
     $('#rel-sha256').value = '';
+    if ($('#rel-file')) $('#rel-file').value = '';
     loadReleases();
+    loadFiles();
   } catch (err) {
     msg.textContent = err.message || '发布失败';
     msg.classList.add('bad');
@@ -211,6 +218,102 @@ function wireReleases() {
   const ref = $('#rel-refresh');
   if (pub) pub.addEventListener('click', publishRelease);
   if (ref) ref.addEventListener('click', loadReleases);
+}
+
+/* ------------------------------ 版本文件管理 ------------------------------ */
+
+function humanSize(bytes) {
+  const n = Number(bytes) || 0;
+  if (n > 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
+  if (n > 1024) return (n / 1024).toFixed(0) + ' KB';
+  return n + ' B';
+}
+
+async function loadFiles() {
+  const table = $('#rel-files');
+  const select = $('#rel-file');
+  if (!table) return;
+  try {
+    const data = await api('/files');
+    const items = data.items || [];
+    const current = data.current || '';
+
+    table.innerHTML =
+      '<thead><tr><th>文件名</th><th style="width:90px">大小</th><th style="width:150px">放进来的时间</th><th style="width:200px">操作</th></tr></thead>' +
+      '<tbody>' +
+      (items.length
+        ? items
+            .map(
+              (f) =>
+                `<tr><td class="mono small">${relEscape(f.name)}${f.name === current ? ' <b>· 当前更新</b>' : ''}</td>` +
+                `<td class="mono small">${humanSize(f.size)}</td>` +
+                `<td class="mono small">${relEscape((f.mtime || '').slice(0, 16).replace('T', ' '))}</td>` +
+                `<td><button class="btn ghost small" data-use="${relEscape(f.name)}">选为当前更新</button> ` +
+                `<button class="btn ghost small" data-del="${relEscape(f.name)}">删除</button></td></tr>`
+            )
+            .join('')
+        : '<tr><td colspan="4" class="muted">目录还是空的，先上传一个安装包。</td></tr>') +
+      '</tbody>';
+
+    table.querySelectorAll('[data-use]').forEach((b) => {
+      b.addEventListener('click', () => {
+        select.value = b.dataset.use;
+        const m = /(\d+(?:\.\d+)+)/.exec(b.dataset.use);
+        if (m) $('#rel-version').value = m[1];
+        $('#rel-url').value = '';
+        $('#rel-msg').textContent = '已经选中这个文件，填好版本号和说明就能发布。';
+      });
+    });
+    table.querySelectorAll('[data-del]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        if (!window.confirm(`删掉 ${b.dataset.del}？删了客户端就下不到了。`)) return;
+        await api(`/files/${encodeURIComponent(b.dataset.del)}`, { method: 'DELETE' });
+        loadFiles();
+      });
+    });
+
+    // 下拉里也列一份
+    select.innerHTML =
+      '<option value="">— 不用服务端的文件 —</option>' +
+      items.map((f) => `<option value="${relEscape(f.name)}">${relEscape(f.name)}</option>`).join('');
+  } catch (err) {
+    table.innerHTML = `<tbody><tr><td class="muted">拉文件列表失败：${relEscape(err.message)}</td></tr></tbody>`;
+  }
+}
+
+async function uploadFile() {
+  const input = $('#rel-upload');
+  const msg = $('#rel-files-msg');
+  const file = input.files && input.files[0];
+  msg.className = 'msg';
+  if (!file) {
+    msg.textContent = '先选一个文件';
+    msg.classList.add('bad');
+    return;
+  }
+  if (!/\.exe$/i.test(file.name)) {
+    msg.textContent = '要 .exe 安装包';
+    msg.classList.add('bad');
+    return;
+  }
+  msg.textContent = `正在上传 ${file.name}（${humanSize(file.size)}）…`;
+  try {
+    const headers = { 'Content-Type': 'application/octet-stream' };
+    if (state.token) headers['Authorization'] = `Admin-Bearer ${state.token}`;
+    const res = await fetch(`/api/admin/files/${encodeURIComponent(file.name)}`, {
+      method: 'PUT',
+      headers,
+      body: file,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || '上传失败');
+    msg.textContent = data.message || '传好了';
+    input.value = '';
+    loadFiles();
+  } catch (err) {
+    msg.textContent = err.message || '上传失败';
+    msg.classList.add('bad');
+  }
 }
 
 /* -------------------------------- 启动 -------------------------------- */
@@ -675,3 +778,12 @@ boot().catch((err) => {
 });
 
 wireReleases();
+
+function wireReleaseFiles() {
+  const up = $('#rel-upload-btn');
+  const ref = $('#rel-files-refresh');
+  if (up) up.addEventListener('click', uploadFile);
+  if (ref) ref.addEventListener('click', loadFiles);
+}
+
+wireReleaseFiles();

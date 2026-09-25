@@ -13,6 +13,8 @@ const { adminAuth, signAdminToken } = require('../middleware/auth');
 const setupToken = require('../admin/setupToken');
 const presence = require('../sockets');
 
+const config = require('../config');
+
 const router = express.Router();
 
 const USERNAME_RE = /^[A-Za-z0-9_\u4e00-\u9fa5-]{3,32}$/;
@@ -415,6 +417,72 @@ router.get('/export', (req, res) => {
 
 // --------------------------------- 发布更新 --------------------------------
 // 发布一条客户端更新。下载地址随便写：GitHub release 也行、自己服务器上的文件也行。
+// ------------------------------ 版本文件管理 ------------------------------
+// 目录：server/client/releases（可在 config 里改）。手动丢进去也行、后台传也行。
+
+const fs = require('fs');
+const path = require('path');
+
+function releasesDir() {
+  const dir = config.releasesDir;
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function safeName(raw) {
+  // 只许文件名本身：带斜杠、反斜杠、点点的一律不收
+  const text = String(raw || '').trim();
+  if (text.includes('/') || text.includes('\\') || text.includes('..')) return '';
+  const name = path.basename(text);
+  if (!name || name !== text) return '';
+  return /^[\w.\-（）()\u4e00-\u9fa5 ]+$/.test(name) && name.toLowerCase().endsWith('.exe') ? name : '';
+}
+
+function dirFiles() {
+  const dir = releasesDir();
+  return fs
+    .readdirSync(dir)
+    .filter((n) => n.toLowerCase().endsWith('.exe'))
+    .map((n) => {
+      const st = fs.statSync(path.join(dir, n));
+      return { name: n, size: st.size, mtime: st.mtime.toISOString() };
+    })
+    .sort((x, y) => (x.mtime < y.mtime ? 1 : -1));
+}
+
+router.get('/files', (req, res) => {
+  const current = db.prepare('SELECT file FROM releases WHERE platform = ? ORDER BY id DESC LIMIT 1').get('win');
+  res.json({ dir: releasesDir(), current: (current && current.file) || '', items: dirFiles() });
+});
+
+router.delete('/files/:name', (req, res) => {
+  const name = safeName(decodeURIComponent(req.params.name));
+  if (!name) return res.status(400).json({ error: 'BAD_NAME', message: '文件名不对' });
+  const full = path.join(releasesDir(), name);
+  if (!fs.existsSync(full)) return res.status(404).json({ error: 'NOT_FOUND', message: '没这个文件' });
+  try {
+    fs.unlinkSync(full);
+  } catch (err) {
+    return res.status(500).json({ error: 'DELETE_FAILED', message: err.message });
+  }
+  res.json({ ok: true, message: '删掉了：' + name });
+});
+
+// 上传：直接把请求体流到磁盘，不进内存（安装包五六十兆）
+router.put('/files/:name', (req, res) => {
+  const name = safeName(decodeURIComponent(req.params.name));
+  if (!name) return res.status(400).json({ error: 'BAD_NAME', message: '文件名不对，要 .exe' });
+  const full = path.join(releasesDir(), name);
+  const out = fs.createWriteStream(full);
+  let size = 0;
+  req.on('data', (chunk) => {
+    size += chunk.length;
+  });
+  req.pipe(out);
+  out.on('finish', () => res.json({ ok: true, message: '传好了：' + name, size }));
+  out.on('error', (err) => res.status(500).json({ error: 'WRITE_FAILED', message: err.message }));
+});
+
 router.get('/releases', (req, res) => {
   const rows = db
     .prepare('SELECT * FROM releases ORDER BY id DESC LIMIT 50')
@@ -429,20 +497,38 @@ router.post('/releases', (req, res) => {
   const sha256 = String(req.body.sha256 || '').trim().toLowerCase();
   const mandatory = req.body.mandatory ? 1 : 0;
   const platform = String(req.body.platform || 'win').trim() || 'win';
+  // 可以直接指定服务端托管的某个文件，省得手拼地址
+  let file = safeName(req.body.file);
+  if (file) {
+    const full = path.join(releasesDir(), file);
+    if (!fs.existsSync(full)) {
+      return res.status(404).json({ error: 'FILE_NOT_FOUND', message: 'releases 目录里没这个文件：' + file });
+    }
+  }
 
   if (!/^\d+(\.\d+)*$/.test(version)) {
     return res.status(400).json({ error: 'BAD_VERSION', message: '版本号要写成 2.6.0 这样' });
   }
-  if (!/^https?:\/\//i.test(url)) {
-    return res.status(400).json({ error: 'BAD_URL', message: '下载地址要用 http(s) 开头' });
+  if (!file && !/^https?:\/\//i.test(url)) {
+    return res.status(400).json({ error: 'BAD_URL', message: '要么给个 http(s) 地址，要么选一个服务端上的文件' });
   }
 
   const info = db
     .prepare(
-      `INSERT INTO releases (version, url, notes, sha256, mandatory, platform, created_at, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO releases (version, url, notes, sha256, mandatory, platform, created_at, created_by, file)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(version, url, notes, sha256, mandatory, platform, new Date().toISOString(), req.admin && req.admin.id);
+    .run(
+      version,
+      url,
+      notes,
+      sha256,
+      mandatory,
+      platform,
+      new Date().toISOString(),
+      req.admin && req.admin.id,
+      file || null
+    );
 
   res.json({
     ok: true,

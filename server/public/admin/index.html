@@ -121,6 +121,24 @@
         </p>
 
         <div class="panel">
+          <h3 class="panel-title">版本文件（服务端 client/releases）</h3>
+          <p class="hint">
+            安装包放这儿，客户端就从这台服务器下载 —— 不用非得发 GitHub Release。
+            只有「当前更新」选中的那个文件能被下载，其他的下不到。
+          </p>
+          <div class="row-actions" style="margin-bottom:10px">
+            <input type="file" id="rel-upload" accept=".exe" />
+            <button class="btn" id="rel-upload-btn">上传</button>
+            <button class="btn ghost" id="rel-files-refresh">刷新文件列表</button>
+          </div>
+          <p class="msg" id="rel-files-msg"></p>
+          <div class="table-wrap">
+            <table id="rel-files"></table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3 class="panel-title">发布一条更新</h3>
           <div class="rel-grid">
             <label>版本号<input id="rel-version" placeholder="比如 2.7.1"></label>
             <label>是否强制
@@ -130,7 +148,14 @@
               </select>
             </label>
           </div>
-          <label>下载地址<input id="rel-url" placeholder="https://github.com/WZL0813/Mythclass-Client/releases/download/v2.7.1/MythclassSetup-2.7.1.exe"></label>
+          <label>用哪个文件（选了就不用填地址）
+            <select id="rel-file">
+              <option value="">— 不用服务端的文件 —</option>
+            </select>
+          </label>
+          <label>下载地址（用上面的文件时留空即可）
+            <input id="rel-url" placeholder="https://github.com/.../MythclassSetup-2.7.1.exe">
+          </label>
           <label>更新说明（客户端会显示）<textarea id="rel-notes" rows="3" placeholder="这次修了什么、加了什么"></textarea></label>
           <label>sha256（可留空，填了就校验）<input id="rel-sha256" placeholder="64 位十六进制"></label>
           <div class="row-actions">

@@ -137,6 +137,14 @@ try {
   /* 已经有了 */
 }
 
+  // releases 表：记这个版本对应哪个文件（服务端托管的安装包）
+  try {
+    db.exec('ALTER TABLE releases ADD COLUMN file TEXT');
+    console.log('[Mythclass] releases 表补了 file 列');
+  } catch (_) {
+    /* 已经有了 */
+  }
+
 // 本机局域网密钥：教师端拼「带密钥的直连链接」要用
 try {
   db.exec('ALTER TABLE clients ADD COLUMN lan_key TEXT');
