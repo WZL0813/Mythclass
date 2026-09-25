@@ -230,6 +230,19 @@ onMounted(async () => {
       if (!payload || payload.clientId !== selectedId.value) return;
       commandLog.value.unshift(payload);
       if (commandLog.value.length > 40) commandLog.value.pop();
+
+      // 通知的回答：客户端会补一条 output 以「回答：」开头的 command_result
+      if (
+        payload.command === 'message' &&
+        typeof payload.output === 'string' &&
+        payload.output.startsWith('回答：')
+      ) {
+        const who = selected.value ? selected.value.name || selected.value.clientUid : '这台机器';
+        pushMessage(`${who} ${payload.output}`);
+        toast.info(`${who} ${payload.output}`);
+        return;
+      }
+
       // 成功的命令只记进右边的事件栏，不再弹 —— 一次批量下发会糊满屏
       if (!payload.ok) {
         toast.warning(`${payload.command || '命令'} 失败了`);
@@ -525,6 +538,59 @@ function pickPrivateIp(sdp) {
 
 /** 这次会话里已经问过「要不要直连」的机器，别反复打扰 */
 const directAsked = new Set();
+
+/**
+ * 通知编辑框。
+ * 选项按位置决定样子（主人定的）：第一个高亮、第二个普通、第三个是输入框；
+ * 每个都能单独勾上或关掉。
+ */
+const notice = ref({
+  open: false,
+  topmost: true,
+  fullscreen: false,
+  title: '',
+  body: '',
+  opts: [
+    { on: true, label: '知道了' },
+    { on: false, label: '' },
+    { on: false, label: '' },
+  ],
+});
+
+function openNotice() {
+  if (!selectedId.value) return toast.warning('先选一台机器');
+  notice.value = {
+    open: true,
+    topmost: true,
+    fullscreen: false,
+    title: '',
+    body: '',
+    opts: [
+      { on: true, label: '知道了' },
+      { on: false, label: '' },
+      { on: false, label: '' },
+    ],
+  };
+}
+
+async function sendNotice() {
+  const n = notice.value;
+  if (!n.body.trim() && !n.title.trim()) return toast.warning('标题和内容至少写一个');
+  const options = n.opts
+    .map((o, i) => (o.on ? { on: true, label: o.label.trim(), slot: i } : null))
+    .filter(Boolean);
+  const ack = await auth.sendCommand(selectedId.value, 'message', {
+    title: n.title.trim() || '老师有话要说',
+    body: n.body.trim() || n.title.trim(),
+    topmost: n.topmost,
+    fullscreen: n.fullscreen,
+    options,
+  });
+  notice.value.open = false;
+  if (ack && ack.ok) toast.success('通知发出去了，等他回答');
+  else toast.warning('没发成功，机器可能离线');
+}
+
 
 /** 探一下那个网页通不通（超时 1.5 秒，探不通不算错，只是换种提示） */
 function probeLanPage(url) {
@@ -873,6 +939,9 @@ async function runCommand(cmd) {
 
   if (cmd.key === 'screen_start') return startScreen();
 
+  // 弹消息：开那个能自定义标题/内容/选项的对话框
+  if (cmd.key === 'message') return openNotice();
+
   if (cmd.key === 'lock' || cmd.key === 'unlock') {
     return sendPlain(cmd.key);
   }
@@ -1019,6 +1088,47 @@ function fmtTime(t) {
     >
       <iconify-icon :icon="railOpen ? 'ph:caret-left' : 'ph:caret-right'"></iconify-icon>
     </button>
+    <!-- 通知编辑框 -->
+    <div v-if="notice.open" class="notice-mask" @click.self="notice.open = false">
+      <div class="notice-box">
+        <h3>发通知</h3>
+        <p class="muted tiny">窗口标题固定是「Mythclass消息通知」，下面的标题和内容由你写。</p>
+
+        <label class="nt-row">
+          <input type="checkbox" v-model="notice.topmost" />
+          <span>置顶显示（压在其他窗口上面）</span>
+        </label>
+        <label class="nt-row">
+          <input type="checkbox" v-model="notice.fullscreen" />
+          <span>全屏显示（占满整块屏幕）</span>
+        </label>
+
+        <p class="nt-label">标题</p>
+        <input class="nt-input" v-model="notice.title" maxlength="40" placeholder="比如：第三节自习安排" />
+
+        <p class="nt-label">内容</p>
+        <textarea class="nt-input" v-model="notice.body" rows="3" maxlength="300"
+                  placeholder="比如：请把作业交到讲台，交完再看书。"></textarea>
+
+        <p class="nt-label">回复选项（最多三个，勾上才显示）</p>
+        <div v-for="(o, i) in notice.opts" :key="i" class="nt-opt">
+          <label class="nt-row">
+            <input type="checkbox" v-model="o.on" />
+            <span class="nt-slot">
+              {{ i === 0 ? '高亮按钮' : i === 1 ? '普通按钮' : '输入框' }}
+            </span>
+          </label>
+          <input class="nt-input" v-model="o.label" maxlength="12"
+                 :placeholder="i === 2 ? '输入框的提示文字，比如：写下你的想法' : '按钮上的字，比如：知道了'" />
+        </div>
+
+        <div class="nt-actions">
+          <button class="btn gh" @click="notice.open = false">取消</button>
+          <button class="btn pm" @click="sendNotice">发出去</button>
+        </div>
+      </div>
+    </div>
+
     <button
       class="edge-toggle right"
       :class="{ off: !eventsOpen }"
@@ -1425,6 +1535,36 @@ function fmtTime(t) {
 </template>
 
 <style scoped>
+/* 通知编辑框 */
+.notice-mask {
+  position: fixed; inset: 0; z-index: 200;
+  display: grid; place-items: center;
+  background: rgba(6, 10, 8, 0.62);
+  backdrop-filter: blur(3px);
+}
+.notice-box {
+  width: min(560px, 92vw); max-height: 88vh; overflow: auto;
+  padding: 20px 22px 18px;
+  border: 1px solid var(--line); border-radius: 16px;
+  background: var(--panel); color: var(--text);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+.notice-box h3 { margin: 0 0 6px; font-size: 16px; }
+.nt-label { margin: 14px 0 6px; font-size: 12.5px; color: var(--sage); }
+.nt-input {
+  width: 100%; padding: 9px 11px; border-radius: 9px; font: inherit; font-size: 13.5px;
+  background: #0f1613; color: var(--text); border: 1px solid var(--line);
+}
+.nt-row { display: flex; align-items: center; gap: 8px; font-size: 13.5px; cursor: pointer; }
+.nt-opt {
+  display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 10px;
+  align-items: center; margin-bottom: 8px;
+}
+.nt-slot { color: var(--sage); font-size: 12.5px; }
+.nt-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.btn.gh { background: transparent; border: 1px solid var(--line); color: var(--sage); }
+.btn.pm { background: #3f6b52; border: 1px solid #4c7d61; color: #f1f6ef; }
+
 /* 直连成功后出现的管理栏：告诉老师「还能进它自己的控制台」 */
 .direct-dock {
   display: flex;
