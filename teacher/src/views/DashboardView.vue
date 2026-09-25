@@ -518,6 +518,24 @@ function probeLanPage(url) {
   });
 }
 
+/** 一键打开局域网控制台：探测通了就直接开，不再多问一句 */
+async function openLanConsole(client) {
+  const target = client || selected.value;
+  const url = lanPageUrl(target);
+  if (!url) {
+    toast.warning('这台机器还没上报内网地址');
+    return false;
+  }
+  const alive = await probeLanPage(url);
+  if (!alive) {
+    toast.error('本地网页打不开，先在那台机器上看看客户端在不在跑');
+    return false;
+  }
+  window.open(url, '_blank', 'noopener');
+  toast.success('已打开局域网控制台（密钥已经带上了）');
+  return true;
+}
+
 /** 问一下要不要切到直连（就是打开一体机自己那个页面） */
 async function askDirect(client) {
   const url = lanPageUrl(client);
@@ -557,9 +575,7 @@ async function askDirect(client) {
   } catch (_) {
     return false; // 老师选了「继续走服务器」
   }
-  window.open(url, '_blank', 'noopener');
-  toast.success('已在新标签页打开直连页面');
-  return true;
+  return openLanConsole(client);
 }
 
 /** 当前这台机器和我是不是同一个局域网（服务端按出口 IP 判的） */
@@ -1139,7 +1155,21 @@ function fmtTime(t) {
             <div v-else class="stage-empty">
               <iconify-icon icon="ph:monitor-play"></iconify-icon>
               <p>{{ selectedOnline ? '点「开始看」拉画面。' : '机器离线，等它上线。' }}</p>
-              <p class="muted tiny">先试 P2P 直连，连不上自动走服务端中继。工具栏右侧会显示当前走的是哪条路。</p>
+              <div v-if="transport === 'p2p' && lanPageUrl(selected)" class="direct-dock">
+            <div class="dd-left">
+              <span class="dd-tag"><Icon icon="ph:lightning" />已直连</span>
+              <span class="dd-text">
+                画面走 P2P，不占服务器带宽。还能打开它自己跑的控制台 ——
+                锁屏、关机、发消息都在那边，一样不走服务器。
+              </span>
+            </div>
+            <button class="dd-go" @click="openLanConsole(selected)">
+              <Icon icon="ph:monitor-play" />
+              打开局域网控制台
+            </button>
+          </div>
+
+          <p class="muted tiny">先试 P2P 直连，连不上自动走服务端中继。工具栏右侧会显示当前走的是哪条路。</p>
             </div>
           </div>
 
@@ -1347,6 +1377,50 @@ function fmtTime(t) {
 </template>
 
 <style scoped>
+/* 直连成功后出现的管理栏：告诉老师「还能进它自己的控制台」 */
+.direct-dock {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin: 10px 0 6px;
+  padding: 12px 14px;
+  border: 1px solid rgba(94, 154, 115, 0.4);
+  border-radius: 12px;
+  background:
+    radial-gradient(520px 160px at 6% -40%, rgba(94, 154, 115, 0.18), transparent 70%),
+    rgba(20, 27, 23, 0.85);
+}
+.dd-left { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.dd-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(94, 154, 115, 0.5);
+  background: rgba(94, 154, 115, 0.16);
+  color: #c9e6d2;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.dd-text { color: #9fb79c; font-size: 13px; }
+.dd-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid #4c7d61;
+  border-radius: 9px;
+  background: #3f6b52;
+  color: #f1f6ef;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dd-go:hover { background: #4a7d60; }
+
 /* 「走直连」按钮：跟「同一局域网」标记挨着，点开就是一体机自己的页面 */
 .lan-go {
   display: inline-flex;
