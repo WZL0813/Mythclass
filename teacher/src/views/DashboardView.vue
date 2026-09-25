@@ -1011,13 +1011,21 @@ function fmtTime(t) {
     <StarBackdrop />
 
     <!-- 两边收起来之后，留在屏幕边上的小把手 —— 不点它就回不来了 -->
-    <button v-if="!railOpen" class="edge-tab left" title="展开「我的机器」" @click="toggleRail(true)">
-      <iconify-icon icon="ph:caret-right"></iconify-icon>
-      机器
+    <button
+      class="edge-toggle left"
+      :class="{ off: !railOpen }"
+      :title="railOpen ? '收起「我的机器」' : '展开「我的机器」'"
+      @click="toggleRail(!railOpen)"
+    >
+      <iconify-icon :icon="railOpen ? 'ph:caret-left' : 'ph:caret-right'"></iconify-icon>
     </button>
-    <button v-if="!eventsOpen" class="edge-tab right" title="展开「事件 / 消息」" @click="toggleEvents(true)">
-      事件
-      <iconify-icon icon="ph:caret-left"></iconify-icon>
+    <button
+      class="edge-toggle right"
+      :class="{ off: !eventsOpen }"
+      :title="eventsOpen ? '收起「事件 / 消息」' : '展开「事件 / 消息」'"
+      @click="toggleEvents(!eventsOpen)"
+    >
+      <iconify-icon :icon="eventsOpen ? 'ph:caret-right' : 'ph:caret-left'"></iconify-icon>
     </button>
 
     <!-- 顶部工具条 -->
@@ -1042,9 +1050,6 @@ function fmtTime(t) {
         <div class="rail-acts">
           <button class="btn small primary" @click="bindDialog.open = true">
             <iconify-icon icon="ph:plus"></iconify-icon>绑定
-          </button>
-          <button class="icon-mini" title="收起这一栏（省地方）" @click="toggleRail(false)">
-            <iconify-icon icon="ph:caret-double-left"></iconify-icon>
           </button>
         </div>
       </div>
@@ -1371,9 +1376,6 @@ function fmtTime(t) {
       <div class="ev-tabs">
         <button :class="['ev-tab', { active: evTab === 'event' }]" @click="evTab = 'event'">事件</button>
         <button :class="['ev-tab', { active: evTab === 'message' }]" @click="evTab = 'message'">消息</button>
-        <button class="icon-mini ev-fold" title="收起这一栏（省地方）" @click="toggleEvents(false)">
-          <iconify-icon icon="ph:caret-double-right"></iconify-icon>
-        </button>
       </div>
       <ul class="ev-list">
         <li v-for="(e, i) in evList" :key="i">
@@ -1524,27 +1526,34 @@ function fmtTime(t) {
   pointer-events: none;
   transition: opacity 0.18s ease;
 }
-/* 收起来之后留在屏幕边上的把手 —— 不点它就回不来了 */
-.edge-tab {
-  position: absolute;
-  top: 64px;
-  z-index: 6;
+/* 贴屏幕左右边缘的伸缩条：固定在竖直中间，只要一个箭头图标 */
+.edge-toggle {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 40;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 8px 7px;
-  border: 1px solid rgba(143, 168, 142, 0.28);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--ink) 78%, transparent);
-  color: #cfe0cc;
-  font-size: 12px;
-  writing-mode: vertical-rl;
+  justify-content: center;
+  width: 20px;
+  height: 64px;
+  padding: 0;
+  border: 1px solid rgba(143, 168, 142, 0.22);
+  background: color-mix(in srgb, var(--ink) 72%, transparent);
+  color: var(--sage);
   cursor: pointer;
   backdrop-filter: blur(8px);
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
-.edge-tab:hover { border-color: rgba(94, 154, 115, 0.55); color: #c9e6d2; }
-.edge-tab.left { left: 6px; }
-.edge-tab.right { right: 6px; }
+.edge-toggle:hover {
+  color: #c9e6d2;
+  border-color: rgba(94, 154, 115, 0.55);
+  background: color-mix(in srgb, var(--ink) 60%, rgba(94, 154, 115, 0.25));
+}
+.edge-toggle.left { left: 0; border-left: 0; border-radius: 0 10px 10px 0; }
+.edge-toggle.right { right: 0; border-right: 0; border-radius: 10px 0 0 10px; }
+/* 已经收起来的那侧，颜色淡一点，提示「点开能拉出来」 */
+.edge-toggle.off { color: #9fd0ac; border-color: rgba(94, 154, 115, 0.45); }
 /* 面板头上的小按钮（绑定旁边那个收起） */
 .rail-acts { display: flex; align-items: center; gap: 6px; }
 .icon-mini {

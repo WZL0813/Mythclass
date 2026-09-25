@@ -85,11 +85,21 @@ function logout() {
 
 <template>
   <header class="nav" :class="{ tucked: navTucked }">
-    <!-- 收起来之后留个小把手，点一下伸回来 -->
-    <button v-if="navTucked" class="nav-handle" title="把导航栏拉回来" @click="setTucked(false)">
-      <iconify-icon icon="ph:caret-down"></iconify-icon>
-      导航
-    </button>
+    <!--
+      收起来之后留个小把手。
+      必须 Teleport 到 body —— 写在 header 里的话，header 收起时
+      translateY(-100%) + opacity:0 会把它一起藏掉，那就再也拉不回来了。
+    -->
+    <Teleport to="body">
+      <button
+        v-if="navTucked"
+        class="nav-handle"
+        title="把导航栏拉回来"
+        @click="setTucked(false)"
+      >
+        <iconify-icon icon="ph:caret-down"></iconify-icon>
+      </button>
+    </Teleport>
     <div class="nav-inner">
       <button class="logo" @click="go('/')">
         <img class="mark" src="/logo-mark.png" alt="Mythclass" />
@@ -138,17 +148,23 @@ function logout() {
   pointer-events: none;
 }
 
-/* 收起后留在左上角的小把手 —— 不然就找不回来了 */
+/* 收起后留在屏幕顶部中间的小把手（只要图标）——
+   不点它就找不回来了 */
 .nav-handle {
   position: fixed;
-  top: 10px;
-  left: 14px;
-  z-index: 60;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;   /* 要压过仪表盘自己的层，不然点不到 */
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 999px;
+  justify-content: center;
+  width: 46px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(143, 168, 142, 0.28);
+  border-top: 0;
+  border-radius: 0 0 10px 10px;
   border: 1px solid rgba(143, 168, 142, 0.28);
   background: color-mix(in srgb, var(--ink) 82%, transparent);
   color: #e8efe6;
