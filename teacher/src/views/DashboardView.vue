@@ -464,10 +464,14 @@ function applyFrame(payload, fromP2P) {
 const LAN_WEB_PORT = 26925;
 
 /** 这台机器本地网页的地址，没有内网 IP 就返回空 */
-function lanPageUrl(client) {
+function lanPageUrl(client, withKey = true) {
   const ips = (client && client.localIps) || [];
   const ip = ips.find((x) => /^(10\.|192\.168\.|172\.)/.test(x)) || p2pPeerIp.value;
-  return ip ? `http://${ip}:${LAN_WEB_PORT}/` : '';
+  if (!ip) return '';
+  // 带上密钥：老师点一下就直接进控制界面，不用手输
+  const key = (client && client.lanKey) || '';
+  const query = withKey && key ? `?key=${encodeURIComponent(key)}` : '';
+  return `http://${ip}:${LAN_WEB_PORT}/${query}`;
 }
 
 /**

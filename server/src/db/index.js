@@ -123,6 +123,14 @@ try {
   /* 已经有了 */
 }
 
+// 本机局域网密钥：教师端拼「带密钥的直连链接」要用
+try {
+  db.exec('ALTER TABLE clients ADD COLUMN lan_key TEXT');
+  console.log('[Mythclass] clients 表补了 lan_key 列');
+} catch (_) {
+  /* 已经有了 */
+}
+
 // 初始数据（只在缺失时插入，不覆盖已有值）
 const seed = db.prepare('INSERT OR IGNORE INTO system_settings (key, value) VALUES (?, ?)');
 seed.run('registration_open', 'true');

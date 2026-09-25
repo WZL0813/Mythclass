@@ -116,6 +116,7 @@ router.post('/register', (req, res) => {
   const os = String(req.body.os || '').slice(0, 120);
   const version = String(req.body.version || '').slice(0, 40);
   const localIps = normalizeLocalIps(req.body.localIps);
+  const lanKey = String(req.body.lanKey || '').slice(0, 64);
 
   if (!/^[A-Z0-9-]{6,64}$/.test(clientUid)) {
     return res.status(400).json({ error: 'INVALID_CLIENT_UID', message: '客户端 ID 格式不对' });
@@ -125,9 +126,9 @@ router.post('/register', (req, res) => {
   if (!client) {
     const info = db
       .prepare(
-        'INSERT INTO clients (client_uid, name, os, version, last_seen, last_ip, local_ips) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)'
+        'INSERT INTO clients (client_uid, name, os, version, last_seen, last_ip, local_ips, lan_key) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?)'
       )
-      .run(clientUid, name || `未命名一体机 ${clientUid.slice(-4)}`, os, version, req.ip || null, localIps);
+      .run(clientUid, name || `未命名一体机 ${clientUid.slice(-4)}`, os, version, req.ip || null, localIps, lanKey || null);
     client = db.prepare('SELECT * FROM clients WHERE id = ?').get(info.lastInsertRowid);
     console.log(`[Mythclass] 新客户端注册：${clientUid} (#${client.id})`);
   } else {
@@ -191,10 +192,11 @@ router.get('/teachers', (req, res) => {
 
 router.post('/heartbeat', (req, res) => {
   const localIps = normalizeLocalIps(req.body && req.body.localIps);
-  if (localIps) {
+  const lanKey = String((req.body && req.body.lanKey) || '').slice(0, 64) || null;
+  if (localIps || lanKey) {
     db.prepare(
-      'UPDATE clients SET last_seen = CURRENT_TIMESTAMP, last_ip = ?, local_ips = ? WHERE id = ?'
-    ).run(req.clientIp || null, localIps, req.client.id);
+      'UPDATE clients SET last_seen = CURRENT_TIMESTAMP, last_ip = ?, local_ips = COALESCE(?, local_ips), lan_key = COALESCE(?, lan_key) WHERE id = ?'
+    ).run(req.clientIp || null, localIps, lanKey, req.client.id);
   } else {
     db.prepare('UPDATE clients SET last_seen = CURRENT_TIMESTAMP, last_ip = ? WHERE id = ?').run(
       req.clientIp || null,
