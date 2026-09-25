@@ -134,6 +134,21 @@ server.on('error', (err) => {
   throw err;
 });
 
+// 启动时清一次太老的文件日志（教师端看到的就都是新的）
+
+try {
+
+  const n = require('./db').pruneFileLogs();
+
+  if (n) console.log(`[Mythclass] 清理了 ${n} 条过期文件日志`);
+
+} catch (err) {
+
+  console.warn('[Mythclass] 文件日志清理跳过：', err.message);
+
+}
+
+
 server.listen(config.port, config.host, () => {
   const token = setupToken.ensureSetupToken();
 

@@ -153,4 +153,37 @@ function countAdmins() {
   return db.prepare('SELECT COUNT(*) AS n FROM admins').get().n;
 }
 
-module.exports = { db, getSystemSetting, setSystemSetting, countAdmins };
+/**
+ * 文件修改日志也自动清理（教师端看到的就是清理过的）。
+ * 默认保留 30 天、每个客户端最多 20000 条。
+ * 客户端那边留 7 天，服务端留久一点，方便老师回看。
+ */
+const FILE_LOG_KEEP_DAYS = Number(process.env.MYTHCLASS_FILE_LOG_DAYS || 30);
+const FILE_LOG_KEEP_ROWS = Number(process.env.MYTHCLASS_FILE_LOG_ROWS || 20000);
+
+function pruneFileLogs() {
+  const cutoff = new Date(Date.now() - FILE_LOG_KEEP_DAYS * 86400 * 1000)
+    .toISOString()
+    .replace('T', ' ')
+    .slice(0, 19);
+  let removed = 0;
+  try {
+    const byTime = db.prepare('DELETE FROM file_logs WHERE timestamp < ?').run(cutoff);
+    removed += byTime.changes || 0;
+    const byRows = db
+      .prepare(
+        `DELETE FROM file_logs WHERE id NOT IN (
+           SELECT id FROM file_logs ORDER BY id DESC LIMIT ?
+         )`
+      )
+      .run(FILE_LOG_KEEP_ROWS);
+    removed += byRows.changes || 0;
+  } catch (err) {
+    console.warn('[Mythclass] 清理文件日志失败：', err.message);
+  }
+  return removed;
+}
+
+module.exports = {
+  pruneFileLogs,
+  FILE_LOG_KEEP_DAYS, db, getSystemSetting, setSystemSetting, countAdmins };

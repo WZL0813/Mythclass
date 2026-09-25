@@ -122,7 +122,6 @@ const tabs = [
 
 const commands = [
   { key: 'lock', label: '锁屏', icon: 'ph:lock', args: [] },
-  { key: 'unlock', label: '解锁', icon: 'ph:lock-open', args: [] },
   { key: 'shutdown', label: '关机', icon: 'ph:power', args: [], danger: true },
   { key: 'reboot', label: '重启', icon: 'ph:arrows-clockwise', args: [], danger: true },
   { key: 'logout', label: '注销', icon: 'ph:sign-out', args: [], danger: true },
@@ -564,6 +563,9 @@ const notice = ref({
   fullscreen: false,
   // 窗口大小与字号都能自定义；勾了自适应就按内容算，最多到屏幕的九成
   autoFit: false,
+  // 纯弹出不用回复：勾上就关掉下面三个选项，并且到点自动关闭
+  autoCloseOn: false,
+  autoClose: 30,
   w: 520,
   h: 300,
   fontTitle: 16,
@@ -577,6 +579,22 @@ const notice = ref({
     { on: false, label: '', send: '' },
   ],
 });
+
+/**
+ * 勾选互斥：
+ * 勾「纯弹出」→ 三个回复选项全部取消；
+ * 勾任意一个回复选项 → 「纯弹出」取消。
+ */
+function pickAutoClose(on) {
+  notice.value.autoCloseOn = on;
+  if (on) notice.value.opts.forEach((o) => { o.on = false; });
+}
+
+function pickOption(index) {
+  const o = notice.value.opts[index];
+  o.on = !o.on;
+  if (o.on) notice.value.autoCloseOn = false;
+}
 
 function openNotice() {
   if (!selectedId.value) return toast.warning('先选一台机器');
@@ -616,6 +634,7 @@ async function sendNotice() {
     topmost: n.topmost,
     fullscreen: n.fullscreen,
     autoFit: n.autoFit,
+    autoClose: n.autoCloseOn ? Number(n.autoClose) || 0 : 0,
     size: { w: Number(n.w) || 520, h: Number(n.h) || 300 },
     fontSize: {
       title: Number(n.fontTitle) || 16,
@@ -980,7 +999,7 @@ async function runCommand(cmd) {
   // 弹消息：开那个能自定义标题/内容/选项的对话框
   if (cmd.key === 'message') return openNotice();
 
-  if (cmd.key === 'lock' || cmd.key === 'unlock') {
+  if (cmd.key === 'lock') {
     return sendPlain(cmd.key);
   }
   if (cmd.key === 'net_ban_lift') {
@@ -1171,10 +1190,21 @@ function fmtTime(t) {
           <span>自适应窗口最大（把文字按比例拉到屏幕能放的最大）</span>
         </label>
 
+        <p class="nt-label">回复方式</p>
+        <label class="nt-row">
+          <input type="checkbox" :checked="notice.autoCloseOn" @change="pickAutoClose($event.target.checked)" />
+          <span>纯弹出，不用回复（到点自己关闭）</span>
+        </label>
+        <label v-if="notice.autoCloseOn" class="nt-mini" style="margin-top:8px;max-width:180px">
+          倒计时秒数（最多 3600）
+          <input class="nt-input" type="number" v-model.number="notice.autoClose" min="5" max="3600" />
+        </label>
+        <p class="muted tiny" v-if="notice.autoCloseOn">勾了它，下面三个回复选项就自动取消了。</p>
+
         <p class="nt-label">回复选项（最多三个，勾上才显示）</p>
         <div v-for="(o, i) in notice.opts" :key="i" class="nt-opt">
           <label class="nt-row">
-            <input type="checkbox" v-model="o.on" />
+            <input type="checkbox" :checked="o.on" @change="pickOption(i)" />
             <span class="nt-slot">
               {{ i === 0 ? '高亮按钮' : i === 1 ? '普通按钮' : '输入框' }}
             </span>
