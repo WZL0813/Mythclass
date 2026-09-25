@@ -551,9 +551,9 @@ const notice = ref({
   title: '',
   body: '',
   opts: [
-    { on: true, label: '知道了' },
-    { on: false, label: '' },
-    { on: false, label: '' },
+    { on: true, label: '知道了', send: '' },
+    { on: false, label: '', send: '' },
+    { on: false, label: '', send: '' },
   ],
 });
 
@@ -577,7 +577,11 @@ async function sendNotice() {
   const n = notice.value;
   if (!n.body.trim() && !n.title.trim()) return toast.warning('标题和内容至少写一个');
   const options = n.opts
-    .map((o, i) => (o.on ? { on: true, label: o.label.trim(), slot: i } : null))
+    .map((o, i) =>
+      o.on
+        ? { on: true, label: o.label.trim(), slot: i, send: (o.send || '').trim() }
+        : null
+    )
     .filter(Boolean);
   const ack = await auth.sendCommand(selectedId.value, 'message', {
     title: n.title.trim() || '老师有话要说',
@@ -1118,8 +1122,12 @@ function fmtTime(t) {
               {{ i === 0 ? '高亮按钮' : i === 1 ? '普通按钮' : '输入框' }}
             </span>
           </label>
-          <input class="nt-input" v-model="o.label" maxlength="12"
-                 :placeholder="i === 2 ? '输入框的提示文字，比如：写下你的想法' : '按钮上的字，比如：知道了'" />
+          <div class="nt-col">
+            <input class="nt-input" v-model="o.label" maxlength="12"
+                   :placeholder="i === 2 ? '输入框的提示文字，比如：写下你的想法' : '按钮上的字，比如：知道了'" />
+            <input v-if="i === 2" class="nt-input" v-model="o.send" maxlength="12"
+                   placeholder="发送选项：发送按钮上的字，比如：提交" />
+          </div>
         </div>
 
         <div class="nt-actions">
@@ -1561,6 +1569,7 @@ function fmtTime(t) {
   align-items: center; margin-bottom: 8px;
 }
 .nt-slot { color: var(--sage); font-size: 12.5px; }
+.nt-col { display: grid; gap: 6px; }
 .nt-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 .btn.gh { background: transparent; border: 1px solid var(--line); color: var(--sage); }
 .btn.pm { background: #3f6b52; border: 1px solid #4c7d61; color: #f1f6ef; }
