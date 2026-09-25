@@ -68,7 +68,12 @@ const selectedOnline = computed(() => (selected.value ? !!auth.presence[selected
  * 每台机器每次会话只弹一次，老师选了「先这样」就不再烦他。
  */
 function suggestDirect(client) {
-  if (!client || client.sameNetwork !== true) return;
+  if (!client) return;
+  // 判断依据：要么服务端说同一局域网，要么 P2P 已经真的直连上了
+  // （后者不需要服务端更新，而且更准）
+  const sameLan = client.sameNetwork === true || !!p2pPeerIp.value;
+  if (!sameLan) return;
+  if (!lanPageUrl(client)) return; // 连地址都拿不到就别打扰人家
   if (directAsked.has(client.id)) return;
   directAsked.add(client.id);
   askDirect(client);
@@ -327,7 +332,22 @@ async function startP2P(clientId) {
   p2p = session;
 
   channel.onopen = () => {
-    if (p2p === session) transport.value = 'p2p';
+    if (p2p === session) {
+      transport.value = 'p2p';
+      // P2P 直连成功 → 从远端描述里把对方内网 IP 抠出来，
+      // 后面「建议用它的网页」就靠这个（原来只依赖服务端字段）
+      try {
+        p2pPeerIp.value =
+          pickPrivateIp(session.pc && session.pc.remoteDescription && session.pc.remoteDescription.sdp) ||
+          pickPrivateIp(session.remoteSdp || '');
+        if (p2pPeerIp.value) {
+          console.log('[Mythclass] P2P 直连，对方局域网 IP', p2pPeerIp.value);
+          setTimeout(() => suggestDirect(selected.value), 500);
+        }
+      } catch (err) {
+        console.warn('抠对方 IP 失败', err);
+      }
+    }
   };
   channel.onclose = () => {
     if (p2p === session && transport.value === 'p2p') transport.value = 'relay';
@@ -394,8 +414,29 @@ const LAN_WEB_PORT = 26925;
 /** 这台机器本地网页的地址，没有内网 IP 就返回空 */
 function lanPageUrl(client) {
   const ips = (client && client.localIps) || [];
-  const ip = ips.find((x) => /^(10\.|192\.168\.|172\.)/.test(x));
+  const ip = ips.find((x) => /^(10\.|192\.168\.|172\.)/.test(x)) || p2pPeerIp.value;
   return ip ? `http://${ip}:${LAN_WEB_PORT}/` : '';
+}
+
+/**
+ * 从 P2P 连接里抠出来的「对方局域网 IP」。
+ *
+ * 为什么需要它：服务端给的 sameNetwork / localIps 只有更新过服务端才有。
+ * 而 P2P 一旦真的直连成功，远端 SDP 里必然带着对方的内网候选地址 ——
+ * 这本身就是「同一个局域网」最硬的证据，比出口 IP 那套还准。
+ */
+const p2pPeerIp = ref('');
+
+/** 从 SDP 里挑出第一个内网 IPv4（公网/srflx/relay 的一律不算） */
+function pickPrivateIp(sdp) {
+  if (!sdp) return '';
+  const found = [];
+  const re = /a=candidate:\S+ \d+ (?:udp|tcp) \d+ ([0-9.]+)/gi;
+  let m;
+  while ((m = re.exec(sdp)) !== null) found.push(m[1]);
+  const extra = /(?:^|[^0-9])((?:10|192\.168|172\.(?:1[6-9]|2\d|3[01]))\.[0-9.]+)/g;
+  while ((m = extra.exec(sdp)) !== null) found.push(m[1]);
+  return found.find((ip) => /^(10\.|192\.168\.|172\.)/.test(ip)) || '';
 }
 
 /** 这次会话里已经问过「要不要直连」的机器，别反复打扰 */
