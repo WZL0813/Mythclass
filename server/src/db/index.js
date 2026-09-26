@@ -137,6 +137,16 @@ try {
   /* 已经有了 */
 }
 
+  // clients 表：客户端实际用的局域网端口（系统占用时会变，教师端拼地址要用）
+  for (const col of ['lan_port', 'lan_web_port']) {
+    try {
+      db.exec(`ALTER TABLE clients ADD COLUMN ${col} INTEGER`);
+      console.log(`[Mythclass] clients 表补了 ${col} 列`);
+    } catch (_) {
+      /* 已经有了 */
+    }
+  }
+
   // releases 表：记这个版本对应哪个文件（服务端托管的安装包）
   try {
     db.exec('ALTER TABLE releases ADD COLUMN file TEXT');

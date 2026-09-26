@@ -523,7 +523,9 @@ function lanPageUrl(client, withKey = true) {
   // 带上密钥：老师点一下就直接进控制界面，不用手输
   const key = (client && client.lanKey) || '';
   const query = withKey && key ? `?key=${encodeURIComponent(key)}` : '';
-  return `http://${ip}:${LAN_WEB_PORT}/${query}`;
+  // 客户端会报它实际用的端口（系统保留端口时它会自己换）
+  const port = Number(client && client.lanWebPort) || LAN_WEB_PORT;
+  return `http://${ip}:${port}/${query}`;
 }
 
 /**

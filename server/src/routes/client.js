@@ -218,6 +218,8 @@ router.post('/register', (req, res) => {
   const version = String(req.body.version || '').slice(0, 40);
   const localIps = normalizeLocalIps(req.body.localIps);
   const lanKey = String(req.body.lanKey || '').slice(0, 64);
+  const lanPort = Number(req.body.lanPort || 0) || 0;
+  const lanWebPort = Number(req.body.lanWebPort || 0) || 0;
 
   if (!/^[A-Z0-9-]{6,64}$/.test(clientUid)) {
     return res.status(400).json({ error: 'INVALID_CLIENT_UID', message: '客户端 ID 格式不对' });
@@ -227,9 +229,9 @@ router.post('/register', (req, res) => {
   if (!client) {
     const info = db
       .prepare(
-        'INSERT INTO clients (client_uid, name, os, version, last_seen, last_ip, local_ips, lan_key) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?)'
+        'INSERT INTO clients (client_uid, name, os, version, last_seen, last_ip, local_ips, lan_key, lan_port, lan_web_port) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?)'
       )
-      .run(clientUid, name || `未命名一体机 ${clientUid.slice(-4)}`, os, version, req.ip || null, localIps, lanKey || null);
+      .run(clientUid, name || `未命名一体机 ${clientUid.slice(-4)}`, os, version, req.ip || null, localIps, lanKey || null, lanPort, lanWebPort);
     client = db.prepare('SELECT * FROM clients WHERE id = ?').get(info.lastInsertRowid);
     console.log(`[Mythclass] 新客户端注册：${clientUid} (#${client.id})`);
   } else {
@@ -294,10 +296,12 @@ router.get('/teachers', (req, res) => {
 router.post('/heartbeat', (req, res) => {
   const localIps = normalizeLocalIps(req.body && req.body.localIps);
   const lanKey = String((req.body && req.body.lanKey) || '').slice(0, 64) || null;
-  if (localIps || lanKey) {
+  const lanPort = Number((req.body && req.body.lanPort) || 0) || null;
+  const lanWebPort = Number((req.body && req.body.lanWebPort) || 0) || null;
+  if (localIps || lanKey || lanPort || lanWebPort) {
     db.prepare(
-      'UPDATE clients SET last_seen = CURRENT_TIMESTAMP, last_ip = ?, local_ips = COALESCE(?, local_ips), lan_key = COALESCE(?, lan_key) WHERE id = ?'
-    ).run(req.clientIp || null, localIps, lanKey, req.client.id);
+      'UPDATE clients SET last_seen = CURRENT_TIMESTAMP, last_ip = ?, local_ips = COALESCE(?, local_ips), lan_key = COALESCE(?, lan_key), lan_port = COALESCE(?, lan_port), lan_web_port = COALESCE(?, lan_web_port) WHERE id = ?'
+    ).run(req.clientIp || null, localIps, lanKey, lanPort, lanWebPort, req.client.id);
   } else {
     db.prepare('UPDATE clients SET last_seen = CURRENT_TIMESTAMP, last_ip = ? WHERE id = ?').run(
       req.clientIp || null,

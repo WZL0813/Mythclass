@@ -172,7 +172,9 @@ function listClients(userId, myIp) {
     // 客户端上报的内网地址（调试时看得到）
     localIps: c.local_ips ? String(c.local_ips).split(',') : [],
     // 拼「带密钥的直连链接」用：点一下就能进本地网页，不用手输密钥
-    lanKey: c.lan_key || '',
+    lanWebPort: c.lan_web_port || 0,
+      lanPort: c.lan_port || 0,
+      lanKey: c.lan_key || '',
     // 同一个出口 IP = 大概率同一个局域网（教室里的一体机和老师笔记本
     // 一般都走同一个学校出口）。客户端没报过地址或看不见出口 IP 时为 null。
     sameNetwork:

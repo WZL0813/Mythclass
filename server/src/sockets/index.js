@@ -211,7 +211,21 @@ function bindClient(socket) {
   socket.emit('registered', { clientId, relayEnabled: config.relayEnabled });
 
   // 心跳：刷新 last_seen，并回执
-  socket.on('heartbeat', () => {
+  socket.on('heartbeat', (payload) => {
+    // 顺便记下客户端实际在用的局域网端口（系统占用时它会自己换）
+    if (payload && typeof payload === 'object') {
+      const lanPort = Number(payload.lanPort || 0) || 0;
+      const lanWebPort = Number(payload.lanWebPort || 0) || 0;
+      if (lanPort || lanWebPort) {
+        try {
+          db.prepare(
+            'UPDATE clients SET lan_port = ?, lan_web_port = ? WHERE id = ?'
+          ).run(lanPort, lanWebPort, clientId);
+        } catch (_) {
+          /* 老库没这两列就算了 */
+        }
+      }
+    }
     touchClient(clientId, socket.handshake.address);
     socket.emit('heartbeat:ack', { t: Date.now() });
     notifyPresence(clientId, true);
