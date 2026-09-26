@@ -552,6 +552,15 @@ const directAsked = new Set();
 
 /* ---------------------- 使用时长 / 磁盘 / 窗口 ---------------------- */
 
+const handUp = ref(false);
+const handAt = ref('');
+const handText = computed(() => `这台机器举手了${handAt.value ? '（' + handAt.value + '）' : ''}`);
+
+function clearHand() {
+  handUp.value = false;
+  handAt.value = '';
+}
+
 const usageRows = ref([]);
 const diskRows = ref([]);
 const diskPath = ref('');
@@ -659,6 +668,21 @@ async function loadWindows() {
   }
 }
 
+async function forceCloseWindow(row) {
+  try {
+    await ElMessageBox.confirm(
+      `强制关会直接结束「${row.app}」，没保存的东西会丢。继续？`,
+      '强制关窗口',
+      { confirmButtonText: '强制关', cancelButtonText: '算了', type: 'error' }
+    );
+  } catch (_) {
+    return;
+  }
+  const ack = await auth.sendCommand(selectedId.value, 'force_close_window', { hwnd: row.hwnd });
+  toast.info((ack && ack.output) || '发过去了');
+  loadWindows();
+}
+
 async function closeWindow(row) {
   try {
     await ElMessageBox.confirm(`关掉「${row.title}」？`, '关窗口', {
@@ -727,8 +751,17 @@ async function askHand() {
 /** 学生举手时客户端会推一条 command='hand' 的结果过来 */
 function onHandNotice(payload) {
   const who = selected.value ? selected.value.name || selected.value.clientUid : '一台机器';
-  pushMessage(`${who} ${payload.output || '举手了'}`);
-  toast.info(`${who} ${payload.output || '举手了'}`);
+  let data = {};
+  try {
+    data = JSON.parse(payload.output || '{}');
+  } catch (_) {
+    data = { hand: String(payload.output || '').includes('举手'), text: payload.output };
+  }
+  const up = data.hand !== false;
+  handUp.value = up;
+  handAt.value = data.at ? new Date(data.at * 1000).toLocaleTimeString().slice(0, 8) : '';
+  pushMessage(`${who} ${up ? '举手了' : '放下手了'}`);
+  if (up) toast.warning(`${who} 举手了`);
 }
 
 /**
@@ -1685,7 +1718,13 @@ function fmtTime(t) {
             <div v-else class="stage-empty">
               <iconify-icon icon="ph:monitor-play"></iconify-icon>
               <p>{{ selectedOnline ? '点「开始看」拉画面。' : '机器离线，等它上线。' }}</p>
-              <div v-if="transport === 'p2p' && lanPageUrl(selected)" class="direct-dock">
+              <div v-if="handUp" class="hand-banner">
+            <span class="hb-dot"></span>
+            <span>{{ handText }}</span>
+            <button class="btn small" @click="clearHand">知道了，放下</button>
+          </div>
+
+          <div v-if="transport === 'p2p' && lanPageUrl(selected)" class="direct-dock">
             <div class="dd-left">
               <span class="dd-tag"><Icon icon="ph:lightning" />已直连</span>
               <span class="dd-text">
@@ -1898,7 +1937,10 @@ function fmtTime(t) {
                   <td>{{ row.app }}</td>
                   <td>{{ row.title }}<span v-if="row.active" class="muted"> · 当前</span></td>
                   <td class="muted">{{ row.stateText }}</td>
-                  <td><button class="btn small danger" @click="closeWindow(row)">关掉</button></td>
+                  <td>
+                    <button class="btn small danger" @click="closeWindow(row)">关掉</button>
+                    <button class="btn small" @click="forceCloseWindow(row)">强制关</button>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -2024,6 +2066,15 @@ function fmtTime(t) {
 </template>
 
 <style scoped>
+.hand-banner {
+  display: flex; align-items: center; gap: 10px; margin: 10px 0 6px;
+  padding: 11px 14px; border-radius: 12px;
+  border: 1px solid rgba(232, 183, 120, 0.5);
+  background: rgba(232, 183, 120, 0.12); color: #f0d9b5; font-size: 13.5px;
+}
+.hb-dot { width: 9px; height: 9px; border-radius: 50%; background: #e8b778; box-shadow: 0 0 8px #e8b778; }
+.hand-banner .btn { margin-left: auto; }
+
 .crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 6px 0 10px; font-size: 12.5px; }
 .crumb { padding: 3px 8px; border-radius: 7px; cursor: pointer; color: var(--sage); border: 1px solid transparent; }
 .crumb:hover { color: var(--text); border-color: var(--line); }
