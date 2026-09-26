@@ -554,7 +554,7 @@ const directAsked = new Set();
 
 const usageRows = ref([]);
 const diskRows = ref([]);
-const diskPath = ref('C:\\');
+const diskPath = ref('');
 const diskParent = ref('');
 const winRows = ref([]);
 const dataBusy = ref(false);
@@ -596,11 +596,25 @@ async function loadUsage() {
   }
 }
 
+/** 路径面包屑：每一段都能点回去 */
+function diskCrumbs() {
+  const path = diskPath.value || '';
+  if (!path) return [{ label: '此电脑', path: '' }];
+  const parts = path.split(/[\\/]/).filter(Boolean);
+  const out = [{ label: '此电脑', path: '' }];
+  let acc = '';
+  parts.forEach((seg, i) => {
+    acc = joinPath(acc, i === 0 ? seg + ':' : seg);
+    out.push({ label: seg, path: acc });
+  });
+  return out;
+}
+
 async function loadDisk(where) {
   if (!selectedId.value) return;
   dataBusy.value = true;
   try {
-    const path = where || diskPath.value || 'C:\\';
+    const path = where === undefined ? diskPath.value : where;
     const data = parseOut(await auth.sendCommand(selectedId.value, 'list_dir', { path }));
     if (!data.items) {
       toast.warning(data.message || '看不了这个目录');
@@ -616,9 +630,16 @@ async function loadDisk(where) {
   }
 }
 
+const BS = String.fromCharCode(92);
+function joinPath(base, name) {
+  const text = String(name || '');
+  if (!base) return /:$/.test(text) ? text + BS : text;
+  const tail = base.endsWith(BS) || base.endsWith('/');
+  return base + (tail ? '' : BS) + text;
+}
+
 function diskInto(name) {
-  const sep = diskPath.value.endsWith('\\') ? '' : '\\';
-  loadDisk(diskPath.value + sep + name);
+  loadDisk(joinPath(diskPath.value, name));
 }
 
 function diskDownload(row) {
@@ -1825,16 +1846,29 @@ function fmtTime(t) {
             <div class="row" style="margin:10px 0">
               <input class="text-input" v-model="diskPath" placeholder="C:\ 或 D:\课件" style="flex:1"
                      @keydown.enter="loadDisk()" />
+              <button class="btn small" @click="loadDisk('')">此电脑</button>
               <button class="btn small" :disabled="dataBusy" @click="loadDisk()">进去</button>
-              <button class="btn small" :disabled="!diskParent" @click="loadDisk(diskParent)">上一级</button>
+              <button class="btn small" @click="loadDisk(diskParent || '')">上一级</button>
             </div>
-            <p v-if="!diskRows.length" class="muted">写个路径点「进去」。</p>
+            <div class="crumbs">
+              <template v-for="(c, i) in diskCrumbs()" :key="c.path + i">
+                <span class="sep" v-if="i">›</span>
+                <span class="crumb" :class="{ on: i === diskCrumbs().length - 1 }" @click="loadDisk(c.path)">
+                  {{ c.label }}
+                </span>
+              </template>
+            </div>
+            <p v-if="!diskRows.length" class="muted">点盘符进去看看。</p>
             <table v-else class="data-table">
               <thead><tr><th>名称</th><th style="width:90px">大小</th><th style="width:140px">改过的时间</th><th style="width:90px">操作</th></tr></thead>
               <tbody>
                 <tr v-for="row in diskRows" :key="row.name">
-                  <td>{{ row.dir ? '📁 ' : '' }}{{ row.name }}</td>
-                  <td class="mono">{{ row.dir ? '—' : formatSize(row.size) }}</td>
+                  <td>{{ row.drive ? '💽 ' : row.dir ? '📁 ' : '' }}{{ row.name }}</td>
+                  <td class="mono">
+                    {{ row.dir
+                      ? (row.drive && row.size ? '剩余 ' + formatSize(row.free) : '—')
+                      : formatSize(row.size) }}
+                  </td>
                   <td class="mono muted">{{ row.mtime }}</td>
                   <td>
                     <button v-if="row.dir" class="btn small" @click="diskInto(row.name)">进去</button>
@@ -1990,6 +2024,12 @@ function fmtTime(t) {
 </template>
 
 <style scoped>
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 6px 0 10px; font-size: 12.5px; }
+.crumb { padding: 3px 8px; border-radius: 7px; cursor: pointer; color: var(--sage); border: 1px solid transparent; }
+.crumb:hover { color: var(--text); border-color: var(--line); }
+.crumb.on { color: var(--text); background: rgba(94, 154, 115, 0.14); border-color: rgba(94, 154, 115, 0.4); }
+.crumbs .sep { color: #4d5c50; }
+
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
 .data-table th { text-align: left; color: var(--sage); font-weight: 400; padding: 7px 8px; border-bottom: 1px solid var(--line); }
 .data-table td { padding: 8px; border-bottom: 1px dashed rgba(143, 168, 142, 0.14); word-break: break-all; }
