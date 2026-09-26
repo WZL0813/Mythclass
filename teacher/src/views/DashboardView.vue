@@ -6,6 +6,7 @@ import { toast } from '@/utils/toast';
 import { useAuthStore } from '@/stores/auth';
 import { HTTP_BASE } from '@/api';
 import { api, OFFICIAL_SERVER, SERVER_URL } from '@/api';
+import { version as appVersion } from '../../package.json';
 import StarBackdrop from '@/components/StarBackdrop.vue';
 
 const router = useRouter();
@@ -1732,6 +1733,7 @@ function fmtTime(t) {
             <button class="btn small" @click="rename"><iconify-icon icon="ph:pencil-simple"></iconify-icon>改名</button>
             <button class="btn small danger" @click="unbind"><iconify-icon icon="ph:link-break"></iconify-icon>解绑</button>
             <button class="btn small ghost" @click="logout"><iconify-icon icon="ph:sign-out"></iconify-icon>退出</button>
+            <span class="app-ver">教师端 v{{ appVersion }}</span>
           </div>
         </header>
 
@@ -2175,6 +2177,8 @@ function fmtTime(t) {
 </template>
 
 <style scoped>
+.app-ver { margin-left: 10px; font-size: 12px; color: #7d8f7a; }
+
 .nt-sound { display: grid; gap: 8px; }
 
 .hand-banner {
