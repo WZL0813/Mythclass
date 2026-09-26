@@ -123,6 +123,11 @@ const tabs = [
   { key: 'settings', label: '设置', icon: 'ph:sliders-horizontal' },
 ];
 
+/** 按 key 找命令 —— 别再用 commands[N] 下标，增删条目就错位了 */
+function commandByKey(key) {
+  return commands.find((c) => c.key === key);
+}
+
 const commands = [
   { key: 'lock', label: '锁屏', icon: 'ph:lock', args: [] },
   { key: 'shutdown', label: '关机', icon: 'ph:power', args: [], danger: true },
@@ -170,14 +175,14 @@ const quickTools = computed(() => [
   { key: 'quiet', label: '黑屏安静', icon: 'ph:monitor-slash', run: () => askQuiet() },
   { key: 'quiet_off', label: '取消黑屏', icon: 'ph:monitor', run: () => sendQuiet(false) },
   { key: 'hand', label: '举手', icon: 'ph:hand-palm', run: () => askHand() },
-  { key: 'lock', label: '锁屏', icon: 'ph:lock', run: () => runCommand(commands[0]) },
-  { key: 'message', label: '弹消息', icon: 'ph:chat-centered-text', run: () => runCommand(commands[5]) },
-  { key: 'broadcast', label: '演示广播', icon: 'ph:broadcast', run: () => runCommand(commands[9]) },
-  { key: 'ban', label: '禁止上网', icon: 'ph:prohibit', run: () => runCommand(commands[10]) },
-  { key: 'unban', label: '放开上网', icon: 'ph:shield-check', run: () => runCommand(commands[11]) },
+  { key: 'lock', label: '锁屏', icon: 'ph:lock', run: () => runCommand(commandByKey('lock')) },
+  { key: 'message', label: '弹消息', icon: 'ph:chat-centered-text', run: () => runCommand(commandByKey('message')) },
+  { key: 'broadcast', label: '演示广播', icon: 'ph:broadcast', run: () => runCommand(commandByKey('screen_broadcast')) },
+  { key: 'ban', label: '禁止上网', icon: 'ph:prohibit', run: () => runCommand(commandByKey('net_ban')) },
+  { key: 'unban', label: '放开上网', icon: 'ph:shield-check', run: () => runCommand(commandByKey('net_ban_lift')) },
   { key: 'shot', label: '截图', icon: 'ph:camera', run: () => screenshot() },
-  { key: 'reboot', label: '重启', icon: 'ph:arrows-clockwise', run: () => runCommand(commands[3]) },
-  { key: 'shutdown', label: '关机', icon: 'ph:power', run: () => runCommand(commands[2]) },
+  { key: 'reboot', label: '重启', icon: 'ph:arrows-clockwise', run: () => runCommand(commandByKey('reboot')) },
+  { key: 'shutdown', label: '关机', icon: 'ph:power', run: () => runCommand(commandByKey('shutdown')) },
 ]);
 
 /** 右侧那一栏：事件看命令回执，消息看上下线 */
