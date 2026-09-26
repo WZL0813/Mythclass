@@ -870,6 +870,10 @@ const notice = ref({
   fullscreen: false,
   // 窗口大小与字号都能自定义；勾了自适应就按内容算，最多到屏幕的九成
   autoFit: false,
+  // 铃声：默认用客户端那个；也可以传一个上去（转 data URL）
+  soundMode: 'default',
+  soundData: '',
+  soundName: '',
   // 纯弹出不用回复：勾上就关掉下面三个选项，并且到点自动关闭
   autoCloseOn: false,
   autoClose: 30,
@@ -909,6 +913,9 @@ function openNotice() {
     open: true,
     topmost: true,
     fullscreen: false,
+    soundMode: 'default',
+    soundData: '',
+    soundName: '',
     autoFit: false,
     w: 520,
     h: 300,
@@ -923,6 +930,34 @@ function openNotice() {
       { on: false, label: '', send: '' },
     ],
   };
+}
+
+/** 读一个音频文件成 data URL */
+function readSound(file) {
+  return new Promise((resolve, reject) => {
+    if (file.size > 8 * 1024 * 1024) {
+      reject(new Error('铃声别超过 8MB'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('读文件失败'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function pickSound(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  try {
+    release.value.soundData = await readSound(file);
+    release.value.soundName = file.name;
+    release.value.soundMode = 'upload';
+    toast.success(`铃声选好了：${file.name}`);
+  } catch (err) {
+    toast.error(err.message || '读文件失败');
+  }
+  event.target.value = '';
 }
 
 async function sendNotice() {
@@ -942,6 +977,7 @@ async function sendNotice() {
     fullscreen: n.fullscreen,
     autoFit: n.autoFit,
     autoClose: n.autoCloseOn ? Number(n.autoClose) || 0 : 0,
+    sound: n.soundMode === 'upload' ? n.soundData : '',
     size: { w: Number(n.w) || 520, h: Number(n.h) || 300 },
     fontSize: {
       title: Number(n.fontTitle) || 16,
@@ -1529,6 +1565,21 @@ function fmtTime(t) {
           <span>自适应窗口最大（把文字按比例拉到屏幕能放的最大）</span>
         </label>
 
+        <p class="nt-label">铃声</p>
+        <div class="nt-sound">
+          <label class="nt-row">
+            <input type="radio" value="default" v-model="notice.soundMode" />
+            <span>用默认铃声（客户端上那个）</span>
+          </label>
+          <label class="nt-row">
+            <input type="radio" value="upload" v-model="notice.soundMode" />
+            <span>上传一个</span>
+            <input type="file" accept="audio/*" style="display:none" ref="soundInput" @change="pickSound" />
+            <button class="btn small" type="button" @click="$refs.soundInput.click()">选文件</button>
+            <span class="muted tiny" v-if="notice.soundName">{{ notice.soundName }}</span>
+          </label>
+        </div>
+
         <p class="nt-label">回复方式</p>
         <label class="nt-row">
           <input type="checkbox" :checked="notice.autoCloseOn" @change="pickAutoClose($event.target.checked)" />
@@ -2095,6 +2146,8 @@ function fmtTime(t) {
 </template>
 
 <style scoped>
+.nt-sound { display: grid; gap: 8px; }
+
 .hand-banner {
   display: flex; align-items: center; gap: 10px; margin: 10px 0 6px;
   padding: 11px 14px; border-radius: 12px;
