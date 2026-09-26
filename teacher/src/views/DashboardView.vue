@@ -172,7 +172,7 @@ const quickTools = computed(() => [
     run: () => (controlMode.value = !controlMode.value),
   },    { key: 'open_app', label: '开程序', icon: 'ph:app-window', run: () => askOpen('app') },
   { key: 'open_url', label: '开网页', icon: 'ph:globe', run: () => askOpen('url') },
-  { key: 'quiet', label: '黑屏安静', icon: 'ph:monitor-slash', run: () => askQuiet() },
+  { key: 'quiet', label: '黑屏安静', icon: 'ph:moon', run: () => askQuiet() },
   { key: 'quiet_off', label: '取消黑屏', icon: 'ph:monitor', run: () => sendQuiet(false) },
   { key: 'hand', label: '举手', icon: 'ph:hand-palm', run: () => askHand() },
   { key: 'lock', label: '锁屏', icon: 'ph:lock', run: () => runCommand(commandByKey('lock')) },
