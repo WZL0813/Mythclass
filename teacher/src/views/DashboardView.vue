@@ -132,6 +132,7 @@ const commands = [
   { key: 'lock', label: '锁屏', icon: 'ph:lock', args: [] },
   { key: 'shutdown', label: '关机', icon: 'ph:power', args: [], danger: true },
   { key: 'reboot', label: '重启', icon: 'ph:arrows-clockwise', args: [], danger: true },
+  { key: 'restart_client', label: '重启客户端', icon: 'ph:arrow-clockwise', args: [] },
   { key: 'logout', label: '注销', icon: 'ph:sign-out', args: [], danger: true },
   { key: 'message', label: '弹消息', icon: 'ph:chat-centered-text', args: ['text'] },
   { key: 'open_url', label: '开网页', icon: 'ph:globe', args: ['url'] },
@@ -180,6 +181,8 @@ const quickTools = computed(() => [
   { key: 'ban', label: '禁止上网', icon: 'ph:prohibit', run: () => runCommand(commandByKey('net_ban')) },
   { key: 'unban', label: '放开上网', icon: 'ph:shield-check', run: () => runCommand(commandByKey('net_ban_lift')) },
   { key: 'shot', label: '截图', icon: 'ph:camera', run: () => screenshot() },
+  { key: 'restart_client', label: '重启客户端', icon: 'ph:arrow-clockwise',
+    run: () => runCommand(commandByKey('restart_client')) },
   { key: 'reboot', label: '重启', icon: 'ph:arrows-clockwise', run: () => runCommand(commandByKey('reboot')) },
   { key: 'shutdown', label: '关机', icon: 'ph:power', run: () => runCommand(commandByKey('shutdown')) },
 ]);
