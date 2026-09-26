@@ -1,6 +1,6 @@
 {
   "name": "mythclass-server",
-  "version": "3.0.0.2",
+  "version": "3.0.0.3",
   "private": true,
   "description": "Mythclass 若思班级一体机管理系统 - 服务端（认证 / 信令 / 中继 / Admin 后台）",
   "main": "src/index.js",

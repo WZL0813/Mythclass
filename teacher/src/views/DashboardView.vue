@@ -904,6 +904,10 @@ const notice = ref({
   soundMode: 'default',
   soundData: '',
   soundName: '',
+  // 语音播报：勾上就把内容念出来，音量/音色在这调
+  speak: false,
+  voiceVolume: 100,
+  voiceName: '',
   // 纯弹出不用回复：勾上就关掉下面三个选项，并且到点自动关闭
   autoCloseOn: false,
   autoClose: 30,
@@ -939,13 +943,17 @@ function pickOption(index) {
 
 function openNotice() {
   if (!selectedId.value) return toast.warning('先选一台机器');
-  notice.value = {
+    loadVoiceOptions();
+notice.value = {
     open: true,
     topmost: true,
     fullscreen: false,
     soundMode: 'default',
     soundData: '',
     soundName: '',
+    speak: false,
+    voiceVolume: 100,
+    voiceName: '',
     autoFit: false,
     w: 520,
     h: 300,
@@ -990,6 +998,35 @@ async function pickSound(event) {
   event.target.value = '';
 }
 
+/** 语音播报：问客户端有哪些音色 */
+const voiceOptions = ref([]);
+
+async function loadVoiceOptions() {
+  try {
+    const data = parseOut(await auth.sendCommand(selectedId.value, 'voice_list', {}));
+    voiceOptions.value = data.voices || [];
+    if (!release.value.voiceName && data.defaultVoice) {
+      release.value.voiceName = data.defaultVoice;
+    }
+  } catch (_) {
+    voiceOptions.value = [];
+  }
+}
+
+async function testVoice() {
+  const text = release.value.body || release.value.title || '这是一条语音播报试听';
+  try {
+    const ack = await auth.sendCommand(selectedId.value, 'speak', {
+      text,
+      voiceVolume: Number(release.value.voiceVolume) || 0,
+      voiceName: release.value.voiceName || '',
+    });
+    toast.info((ack && ack.output) || '发过去了');
+  } catch (err) {
+    toast.error(err.message || '试听失败');
+  }
+}
+
 async function sendNotice() {
   const n = notice.value;
   if (!n.body.trim() && !n.title.trim()) return toast.warning('标题和内容至少写一个');
@@ -1008,6 +1045,9 @@ async function sendNotice() {
     autoFit: n.autoFit,
     autoClose: n.autoCloseOn ? Number(n.autoClose) || 0 : 0,
     sound: n.soundMode === 'upload' ? n.soundData : '',
+    voice: !!n.speak,
+    voiceVolume: Number(n.voiceVolume) || 0,
+    voiceName: n.voiceName || '',
     size: { w: Number(n.w) || 520, h: Number(n.h) || 300 },
     fontSize: {
       title: Number(n.fontTitle) || 16,
@@ -1594,6 +1634,23 @@ function fmtTime(t) {
           <input type="checkbox" v-model="notice.autoFit" />
           <span>自适应窗口最大（把文字按比例拉到屏幕能放的最大）</span>
         </label>
+
+        <p class="nt-label">语音播报</p>
+        <div class="nt-sound" id="ntVoiceRow">
+          <label class="nt-row">
+            <input type="checkbox" v-model="notice.speak" />
+            <span>把内容念出来</span>
+          </label>
+          <div class="nt-row" v-if="notice.speak">
+            <span class="muted tiny">音量</span>
+            <input type="range" min="0" max="100" v-model.number="notice.voiceVolume" style="flex:1" />
+            <span class="mono" style="min-width:34px">{{ notice.voiceVolume }}</span>
+            <select class="nt-input" v-model="notice.voiceName" style="max-width:230px">
+              <option v-for="v in voiceOptions" :key="v.name" :value="v.name">{{ v.name }}</option>
+            </select>
+            <button class="btn small" type="button" @click="testVoice">试听</button>
+          </div>
+        </div>
 
         <p class="nt-label">铃声</p>
         <div class="nt-sound">
