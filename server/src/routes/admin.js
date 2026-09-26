@@ -422,6 +422,7 @@ router.get('/export', (req, res) => {
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 function releasesDir() {
   const dir = config.releasesDir;
@@ -499,10 +500,21 @@ router.post('/releases', (req, res) => {
   const platform = String(req.body.platform || 'win').trim() || 'win';
   // 可以直接指定服务端托管的某个文件，省得手拼地址
   let file = safeName(req.body.file);
+  let sha = sha256;
   if (file) {
     const full = path.join(releasesDir(), file);
     if (!fs.existsSync(full)) {
       return res.status(404).json({ error: 'FILE_NOT_FOUND', message: 'releases 目录里没这个文件：' + file });
+    }
+    // 文件在服务器上，sha256 就自己算 —— 靠人填容易漏，漏了客户端就没法校验，
+    // 万一返回的不是安装包（比如一坨 HTML），客户端会直接拿去跑
+    try {
+      sha = crypto.createHash('sha256').update(fs.readFileSync(full)).digest('hex');
+      if (req.body.sha256 && String(req.body.sha256).trim().toLowerCase() !== sha) {
+        console.log(`[Mythclass] 发布 ${version}：填的 sha256 和文件实际不一致，以文件为准`);
+      }
+    } catch (err) {
+      return res.status(500).json({ error: 'HASH_FAILED', message: '算 sha256 失败：' + err.message });
     }
   }
 
@@ -522,7 +534,7 @@ router.post('/releases', (req, res) => {
       version,
       url,
       notes,
-      sha256,
+      sha,
       mandatory,
       platform,
       new Date().toISOString(),
