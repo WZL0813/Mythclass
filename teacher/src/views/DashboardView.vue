@@ -907,6 +907,7 @@ const notice = ref({
   // 语音播报：勾上就把内容念出来，音量/音色在这调
   speak: false,
   voiceVolume: 100,
+  voiceRate: 0,
   voiceName: '',
   // 念哪些 + 先念哪个（拖动调整）
   voiceParts: ['title', 'content'],
@@ -956,6 +957,7 @@ notice.value = {
     soundName: '',
     speak: false,
     voiceVolume: 100,
+    voiceRate: 0,
     voiceName: '',
     voiceParts: ['title', 'content'],
     voiceOrder: ['title', 'content'],
@@ -1040,6 +1042,13 @@ function voiceDragOver(index) {
   voiceDragFrom.value = index;
 }
 
+/** 语速显示成人话 */
+const rateText = computed(() => {
+  const r = Number(notice.value.voiceRate) || 0;
+  if (r === 0) return '0（正常）';
+  return r < 0 ? `${r}（慢）` : `+${r}（快）`;
+});
+
 async function testVoice() {
   const text = notice.value.body || notice.value.title || '这是一条语音播报试听';
   try {
@@ -1049,6 +1058,7 @@ async function testVoice() {
       voiceParts: notice.value.voiceParts || [],
       voiceOrder: notice.value.voiceOrder || [],
       voiceVolume: Number(notice.value.voiceVolume) || 0,
+      voiceRate: Number(notice.value.voiceRate) || 0,
       voiceName: notice.value.voiceName || '',
     });
     toast.info((ack && ack.output) || '发过去了');
@@ -1077,6 +1087,7 @@ async function sendNotice() {
     sound: n.soundMode === 'upload' ? n.soundData : '',
     voice: !!n.speak,
     voiceVolume: Number(n.voiceVolume) || 0,
+    voiceRate: Number(n.voiceRate) || 0,
     voiceName: n.voiceName || '',
     voiceParts: n.voiceParts || [],
     voiceOrder: n.voiceOrder || [],
@@ -1701,6 +1712,9 @@ function fmtTime(t) {
           <div class="nt-row" v-if="notice.speak">
             <span class="muted tiny">音量</span>
             <input type="range" min="0" max="100" v-model.number="notice.voiceVolume" style="flex:1" />
+            <span class="muted tiny">语速</span>
+            <input type="range" min="-10" max="10" step="1" v-model.number="notice.voiceRate" style="flex:1" />
+            <span class="mono" style="min-width:52px">{{ rateText }}</span>
             <span class="mono" style="min-width:34px">{{ notice.voiceVolume }}</span>
             <select class="nt-input" v-model="notice.voiceName" style="max-width:230px">
               <option v-for="v in voiceOptions" :key="v.name" :value="v.name">{{ v.name }}</option>
