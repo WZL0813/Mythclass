@@ -908,6 +908,9 @@ const notice = ref({
   speak: false,
   voiceVolume: 100,
   voiceName: '',
+  // 念哪些 + 先念哪个（拖动调整）
+  voiceParts: ['title', 'content'],
+  voiceOrder: ['title', 'content'],
   // 纯弹出不用回复：勾上就关掉下面三个选项，并且到点自动关闭
   autoCloseOn: false,
   autoClose: 30,
@@ -954,6 +957,8 @@ notice.value = {
     speak: false,
     voiceVolume: 100,
     voiceName: '',
+    voiceParts: ['title', 'content'],
+    voiceOrder: ['title', 'content'],
     autoFit: false,
     w: 520,
     h: 300,
@@ -988,9 +993,9 @@ async function pickSound(event) {
   const file = event.target.files && event.target.files[0];
   if (!file) return;
   try {
-    release.value.soundData = await readSound(file);
-    release.value.soundName = file.name;
-    release.value.soundMode = 'upload';
+    notice.value.soundData = await readSound(file);
+    notice.value.soundName = file.name;
+    notice.value.soundMode = 'upload';
     toast.success(`铃声选好了：${file.name}`);
   } catch (err) {
     toast.error(err.message || '读文件失败');
@@ -1005,21 +1010,46 @@ async function loadVoiceOptions() {
   try {
     const data = parseOut(await auth.sendCommand(selectedId.value, 'voice_list', {}));
     voiceOptions.value = data.voices || [];
-    if (!release.value.voiceName && data.defaultVoice) {
-      release.value.voiceName = data.defaultVoice;
+    if (!notice.value.voiceName && data.defaultVoice) {
+      notice.value.voiceName = data.defaultVoice;
     }
   } catch (_) {
     voiceOptions.value = [];
   }
 }
 
+/** 语音：勾/取消「念哪些」，以及拖动排序 */
+const voiceDragFrom = ref(-1);
+
+function toggleVoicePart(part) {
+  const list = notice.value.voiceParts;
+  const i = list.indexOf(part);
+  if (i >= 0) {
+    list.splice(i, 1);
+  } else {
+    list.push(part);
+  }
+}
+
+function voiceDragOver(index) {
+  const from = voiceDragFrom.value;
+  if (from < 0 || from === index) return;
+  const list = notice.value.voiceOrder;
+  const moved = list.splice(from, 1)[0];
+  list.splice(index, 0, moved);
+  voiceDragFrom.value = index;
+}
+
 async function testVoice() {
-  const text = release.value.body || release.value.title || '这是一条语音播报试听';
+  const text = notice.value.body || notice.value.title || '这是一条语音播报试听';
   try {
     const ack = await auth.sendCommand(selectedId.value, 'speak', {
-      text,
-      voiceVolume: Number(release.value.voiceVolume) || 0,
-      voiceName: release.value.voiceName || '',
+      title: notice.value.title || '',
+      body: text,
+      voiceParts: notice.value.voiceParts || [],
+      voiceOrder: notice.value.voiceOrder || [],
+      voiceVolume: Number(notice.value.voiceVolume) || 0,
+      voiceName: notice.value.voiceName || '',
     });
     toast.info((ack && ack.output) || '发过去了');
   } catch (err) {
@@ -1048,6 +1078,8 @@ async function sendNotice() {
     voice: !!n.speak,
     voiceVolume: Number(n.voiceVolume) || 0,
     voiceName: n.voiceName || '',
+    voiceParts: n.voiceParts || [],
+    voiceOrder: n.voiceOrder || [],
     size: { w: Number(n.w) || 520, h: Number(n.h) || 300 },
     fontSize: {
       title: Number(n.fontTitle) || 16,
@@ -1642,6 +1674,31 @@ function fmtTime(t) {
             <span>把内容念出来</span>
           </label>
           <div class="nt-row" v-if="notice.speak">
+            <span class="muted tiny">念哪些</span>
+            <label class="nt-row">
+              <input type="checkbox" :checked="notice.voiceParts.includes('title')"
+                     @change="toggleVoicePart('title')" /> 标题
+            </label>
+            <label class="nt-row">
+              <input type="checkbox" :checked="notice.voiceParts.includes('content')"
+                     @change="toggleVoicePart('content')" /> 内容
+            </label>
+          </div>
+          <div class="nt-row" v-if="notice.speak">
+            <span class="muted tiny">顺序（拖右边的把手）</span>
+            <div class="vo-order">
+              <div v-for="(p, i) in notice.voiceOrder" :key="p" class="vo-item" draggable="true"
+                   :class="{ dragging: voiceDragFrom === i }"
+                   @dragstart="voiceDragFrom = i"
+                   @dragover.prevent="voiceDragOver(i)"
+                   @dragend="voiceDragFrom = -1">
+                <span class="vo-no">{{ i + 1 }}</span>
+                <span>{{ p === 'title' ? '标题' : '内容' }}</span>
+                <span class="vo-grip" title="拖我换顺序">≡</span>
+              </div>
+            </div>
+          </div>
+          <div class="nt-row" v-if="notice.speak">
             <span class="muted tiny">音量</span>
             <input type="range" min="0" max="100" v-model.number="notice.voiceVolume" style="flex:1" />
             <span class="mono" style="min-width:34px">{{ notice.voiceVolume }}</span>
@@ -2234,6 +2291,17 @@ function fmtTime(t) {
 </template>
 
 <style scoped>
+.vo-order { display: flex; gap: 8px; flex-wrap: wrap; }
+.vo-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-radius: 9px;
+  border: 1px solid #2b3a2d; background: #141c16; color: #dfe6d8; font-size: 13px;
+  cursor: grab;
+}
+.vo-item.dragging { opacity: 0.45; }
+.vo-no { color: #7d8f7a; font-size: 12px; }
+.vo-grip { color: #6f8a6b; cursor: grab; padding: 0 2px; user-select: none; }
+
 .app-ver { margin-left: 10px; font-size: 12px; color: #7d8f7a; }
 
 .nt-sound { display: grid; gap: 8px; }
