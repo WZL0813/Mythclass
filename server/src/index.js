@@ -98,7 +98,7 @@ app.get('/healthz', (req, res) => {
 app.get('/api/meta', (req, res) => {
   res.json({
     service: 'Mythclass 服务端',
-    version: '3.0.0.4',
+    version: '3.0.0.6',
     features: [
       'client-teachers', // 客户端可拉取绑定老师（本地网页要用）
       'local-ips', // 记录客户端上报的内网 IP

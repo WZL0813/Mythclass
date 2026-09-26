@@ -1,7 +1,7 @@
 {
   "name": "mythclass-teacher",
   "private": true,
-  "version": "3.0.0.4",
+  "version": "3.0.0.6",
   "type": "module",
   "description": "Mythclass 若思班级一体机管理系统 - 教师端（官网介绍 + 巡课控制台）",
   "scripts": {
