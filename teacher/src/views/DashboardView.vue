@@ -174,8 +174,7 @@ const quickTools = computed(() => [
   { key: 'open_url', label: '开网页', icon: 'ph:globe', run: () => askOpen('url') },
   { key: 'quiet', label: '黑屏安静', icon: 'ph:moon', run: () => askQuiet() },
   { key: 'quiet_off', label: '取消黑屏', icon: 'ph:monitor', run: () => sendQuiet(false) },
-  { key: 'hand', label: '举手', icon: 'ph:hand-palm', run: () => askHand() },
-  { key: 'lock', label: '锁屏', icon: 'ph:lock', run: () => runCommand(commandByKey('lock')) },
+    { key: 'lock', label: '锁屏', icon: 'ph:lock', run: () => runCommand(commandByKey('lock')) },
   { key: 'message', label: '弹消息', icon: 'ph:chat-centered-text', run: () => runCommand(commandByKey('message')) },
   { key: 'broadcast', label: '演示广播', icon: 'ph:broadcast', run: () => runCommand(commandByKey('screen_broadcast')) },
   { key: 'ban', label: '禁止上网', icon: 'ph:prohibit', run: () => runCommand(commandByKey('net_ban')) },
@@ -521,6 +520,18 @@ function applyFrame(payload, fromP2P) {
 const LAN_WEB_PORT = 26925;
 
 /** 这台机器本地网页的地址，没有内网 IP 就返回空 */
+/** 客户端局域网网页上取文件的地址（下载用；带密钥，直接开新标签页） */
+function lanFileUrl(path, client) {
+  const c = client || selected.value;
+  if (!c) return '';
+  const ips = (c && c.localIps) || [];
+  const ip = ips.find((x) => /^(10\.|192\.168\.|172\.)/.test(x)) || p2pPeerIp.value;
+  if (!ip) return '';
+  const port = Number(c && c.lanWebPort) || LAN_WEB_PORT;
+  const key = (c && c.lanKey) || '';
+  return `http://${ip}:${port}/api/file?key=${encodeURIComponent(key)}&path=${encodeURIComponent(path)}`;
+}
+
 function lanPageUrl(client, withKey = true) {
   const ips = (client && client.localIps) || [];
   const ip = ips.find((x) => /^(10\.|192\.168\.|172\.)/.test(x)) || p2pPeerIp.value;
@@ -659,7 +670,15 @@ function diskInto(name) {
 }
 
 function diskDownload(row) {
-  toast.info(`要下载「${row.name}」得在局域网控制台那边点，教师端这条通道只传文本`);
+  // 不走服务器那条文本通道 —— 直接开客户端局域网网页上的文件地址
+  const full = joinPath(diskPath.value, row.name);
+  const url = lanFileUrl(full);
+  if (!url) {
+    toast.warning('拿不到这台机器的局域网地址，去局域网控制台下载吧');
+    return;
+  }
+  window.open(url, '_blank');
+  toast.success(`开始下载 ${row.name}`);
 }
 
 async function loadWindows() {
