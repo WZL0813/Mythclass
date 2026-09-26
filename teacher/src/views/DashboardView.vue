@@ -1300,6 +1300,31 @@ async function saveSettings() {
 
 /* -------------------------------- 命令面板 -------------------------------- */
 
+/** 重启两次确认、关机三次确认 */
+async function confirmPower(kind) {
+  const isReboot = kind === 'reboot';
+  const name = isReboot ? '重启' : '关机';
+  const steps = isReboot
+    ? ['要重启这台机器？', '再确认一次：重启后正在做的事会中断，继续？']
+    : [
+        '要关机这台机器？',
+        '第二次确认：关机后要人到跟前才能开，继续？',
+        '第三次确认：真的关机？',
+      ];
+  for (let i = 0; i < steps.length; i += 1) {
+    try {
+      await ElMessageBox.confirm(steps[i], `${name}（第 ${i + 1} / ${steps.length} 次确认）`, {
+        confirmButtonText: i === steps.length - 1 ? `确认${name}` : '继续',
+        cancelButtonText: '算了',
+        type: i === steps.length - 1 ? 'error' : 'warning',
+      });
+    } catch (_) {
+      return;
+    }
+  }
+  return sendPlain(kind);
+}
+
 async function runCommand(cmd) {
   if (!selectedId.value) return;
   if (!selectedOnline.value) return toast.warning('这台机器离线呢。');
@@ -1308,6 +1333,10 @@ async function runCommand(cmd) {
 
   // 弹消息：开那个能自定义标题/内容/选项的对话框
   if (cmd.key === 'message') return openNotice();
+
+  // 重启两次确认、关机三次确认（主人要求）
+  if (cmd.key === 'reboot') return confirmPower('reboot');
+  if (cmd.key === 'shutdown') return confirmPower('shutdown');
 
   if (cmd.key === 'lock') {
     return sendPlain(cmd.key);
