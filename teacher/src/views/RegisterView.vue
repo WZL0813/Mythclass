@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth';
 import { api } from '@/api';
 import LoadingOverlay from '@/components/LoadingOverlay.vue';
 import { playStarReveal } from '@/composables/starReveal';
+import StarBackdrop from '@/components/StarBackdrop.vue';
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -234,6 +235,9 @@ async function submit() {
 </script>
 
 <template>
+  <!-- 这一页的背景就是那片星光（和控制台同一片） -->
+  <StarBackdrop />
+
   <div class="auth-page">
     <div class="auth-card glass reveal">
       <img class="brand-logo" src="/logo.png" alt="Mythclass" />
@@ -336,6 +340,8 @@ async function submit() {
 
 <style scoped>
 .auth-page {
+  position: relative;
+  z-index: 1;
   min-height: calc(100vh - 68px);
   display: grid;
   place-items: center;
