@@ -211,7 +211,7 @@ onMounted(async () => {
   timings = {
     stars: props.starsFor * k,
     gather: props.plain ? 420 : props.gatherFor * k,
-    hold: props.holdFor * k,
+    hold: props.plain ? 420 : props.holdFor * k, // 只浮现星光时不用停那么久
   };
 
   // 等字体就位再采样，不然量到的是替身字体的形状
