@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useAuthStore } from '@/stores/auth';
 import LoadingOverlay from '@/components/LoadingOverlay.vue';
-import { playStarReveal } from '@/composables/starReveal';
+import { playStarReveal, playStarRevealThen } from '@/composables/starReveal';
 
 const router = useRouter();
 const route = useRoute();
@@ -12,6 +12,11 @@ const auth = useAuthStore();
 
 const form = ref({ username: '', password: '' });
 const loading = ref(false);
+
+/** 点「去注册」：先把整个界面隐掉，让星光慢慢浮起来，再显出注册界面 */
+function goRegister() {
+  playStarRevealThen(() => router.push('/register'), '', { plain: true });
+}
 const step = ref(0);
 const patience = ref(false);
 const error = ref('');
@@ -94,7 +99,7 @@ async function submit() {
 
       <p class="foot">
         还没账号？
-        <router-link to="/register">去注册</router-link>
+        <a href="/register" @click.prevent="goRegister">去注册</a>
         <span class="sep">·</span>
         <router-link to="/">回首页</router-link>
       </p>

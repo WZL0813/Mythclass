@@ -76,6 +76,11 @@ function go(to) {
   }
 }
 
+/** 注册也走一遍星光：界面先隐掉，星光慢慢浮起来，再显注册页 */
+function goRegister() {
+  playStarRevealThen(() => router.push('/register'), '', { plain: true });
+}
+
 function logout() {
   menuOpen.value = false;
   auth.logout();
@@ -121,7 +126,7 @@ function logout() {
 
         <template v-if="!loggedIn">
           <button class="btn small ghost" @click="go('/login')">登录</button>
-          <button class="btn small primary" @click="go('/register')">注册</button>
+          <button class="btn small primary" @click="goRegister">注册</button>
         </template>
 
         <template v-else>

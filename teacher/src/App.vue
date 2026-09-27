@@ -4,7 +4,14 @@ import { useRoute } from 'vue-router';
 import NavBar from '@/components/NavBar.vue';
 import FooterBar from '@/components/FooterBar.vue';
 import StarReveal from '@/components/StarReveal.vue';
-import { closeStarReveal, pageVeiled, revealActive, unveilPage } from '@/composables/starReveal';
+import {
+  closeStarReveal,
+  pageVeiled,
+  revealActive,
+  revealPlain,
+  revealText,
+  unveilPage,
+} from '@/composables/starReveal';
 import { useAuthStore } from '@/stores/auth';
 
 const route = useRoute();
@@ -42,7 +49,13 @@ onMounted(async () => {
          必须 teleport 到 body：.app-shell 隐身时是 opacity:0，
          opacity 会让**所有后代跟着透明**，挂在里面星幕就白画了。 -->
     <Teleport to="body">
-      <StarReveal v-if="revealActive" text="Mythclass" @unveil="unveilPage" @closed="closeStarReveal" />
+      <StarReveal
+          v-if="revealActive"
+          :text="revealText"
+          :plain="revealPlain"
+          @unveil="unveilPage"
+          @closed="closeStarReveal"
+        />
     </Teleport>
   </div>
 </template>

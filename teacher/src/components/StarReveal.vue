@@ -10,6 +10,8 @@ import { onBeforeUnmount, onMounted, ref } from 'vue';
 
 const props = defineProps({
   text: { type: String, default: 'Mythclass' },
+    // 只让星光浮起来、乱闪，不拼字（注册过场那种）
+    plain: { type: Boolean, default: false },
   starsFor: { type: Number, default: 850 }, // 先乱闪多久
   gatherFor: { type: Number, default: 1750 }, // 汇聚用时
   holdFor: { type: Number, default: 900 }, // 汇成后停多久
@@ -73,6 +75,25 @@ function measureTargets() {
   const picked = [];
   for (let i = 0; i < MAX_STARS; i += 1) picked.push(points[Math.floor(i * step)]);
   return picked;
+}
+
+/** 只撒一片星光，不拼字 —— 注册过场用 */
+function seedPlain() {
+  const count = Math.min(560, Math.max(180, Math.round((w * h) / 4600)));
+  stars = Array.from({ length: count }, () => {
+    const sx = Math.random() * w;
+    const sy = Math.random() * h;
+    return {
+      sx,
+      sy,
+      tx: sx, // 目标就是原地：只会轻轻呼吸，不会飞向任何形状
+      ty: sy,
+      size: 0.7 + Math.random() * 1.6,
+      delay: Math.random() * 0.24,
+      twinkle: Math.random() * Math.PI * 2,
+      color: PALETTE[Math.floor(Math.random() * PALETTE.length)],
+    };
+  });
 }
 
 function seed() {
@@ -189,7 +210,7 @@ onMounted(async () => {
   const k = calm ? 0.25 : 1;
   timings = {
     stars: props.starsFor * k,
-    gather: props.gatherFor * k,
+    gather: props.plain ? 420 : props.gatherFor * k,
     hold: props.holdFor * k,
   };
 
@@ -200,7 +221,8 @@ onMounted(async () => {
     /* 拿不到就算了 */
   }
 
-  seed();
+  if (props.plain) seedPlain();
+  else seed();
   startedAt = performance.now();
   raf = requestAnimationFrame(tick);
 });

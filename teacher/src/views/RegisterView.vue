@@ -102,21 +102,49 @@ function applyHint() {
   syncGate();
 }
 
+/** 成就弹出时放的那段音频（浏览器只认 mp3，源是 wma，已经转好放进 public） */
+let achievementAudio = null;
+function playAchievementSound() {
+  try {
+    if (!achievementAudio) {
+      achievementAudio = new Audio('/achievement-world-peace.mp3');
+      achievementAudio.volume = 0.9;
+    }
+    achievementAudio.currentTime = 0;
+    const p = achievementAudio.play();
+    if (p && p.catch) p.catch(() => { /* 浏览器不让自动播就算了，不影响彩蛋 */ });
+  } catch (_) {
+    /* 放不了也不影响 */
+  }
+}
+
 function tryGate() {
   if (solved.value) return;
 
   if (gateValue.value === ANSWER) {
     solved.value = true;
-    achievement.value = true;                        // 从右往左划进来
-    later(() => (achievement.value = false), 3600);   // 停 3 秒左右，再划回去
+
+    // ① 背景星光汇聚成「世界和平」
+    const revealed = playStarReveal('世界和平');
+
+    // ② 四字正停着的时候，成就从右上角划进来，同时放那段音频
     later(() => {
-      gateOpen.value = false;                        // 覆盖层消失，露出注册界面
-      solved.value = false;
-      wrongCount.value = 0;
-      lockedPart.value = '';
-      typedPart.value = '';
-      syncGate();
-    }, 4400);
+      achievement.value = true;
+      playAchievementSound();
+    }, 2500);
+    later(() => (achievement.value = false), 6800);
+
+    // ③ 星幕收干净 = 四个字消失了、背景星光重新浮现 → 露出注册界面
+    revealed.then(() => {
+      later(() => {
+        gateOpen.value = false;
+        solved.value = false;
+        wrongCount.value = 0;
+        lockedPart.value = '';
+        typedPart.value = '';
+        syncGate();
+      }, 280);
+    });
     return;
   }
 
@@ -290,15 +318,19 @@ async function submit() {
       :patience-hint="patience"
     />
 
-    <!-- 成就：从右上角划进来，停一会儿，再划回屏幕外 -->
-    <transition name="toast">
-      <img
-        v-if="achievement"
-        class="achievement"
-        src="/achievement-world-peace.png"
-        alt="获得成就：世界和平"
-      />
-    </transition>
+    <!-- 成就：从右上角划进来，停一会儿，再划回屏幕外。
+         传送到 body —— 星幕在的时候整页 opacity:0，留在壳里就跟着透明了，
+         那样"四字停着 + 成就弹出"根本看不见。 -->
+    <Teleport to="body">
+      <transition name="toast">
+        <img
+          v-if="achievement"
+          class="achievement"
+          src="/achievement-world-peace.png"
+          alt="获得成就：世界和平"
+        />
+      </transition>
+    </Teleport>
   </div>
 </template>
 
@@ -451,7 +483,7 @@ form { margin-top: 20px; }
   right: 18px;
   width: 320px;
   max-width: 78vw;
-  z-index: 60;
+  z-index: 200; /* 必须压在星幕(120)上面 */
   pointer-events: none;
   image-rendering: pixelated;
   filter: drop-shadow(0 12px 26px rgba(0, 0, 0, 0.5));
