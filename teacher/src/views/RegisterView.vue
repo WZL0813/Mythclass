@@ -126,7 +126,7 @@ function tryGate() {
     solved.value = true;
 
     // ① 背景星光汇聚成「世界和平」
-    const revealed = playStarReveal('世界和平');
+    const revealed = playStarReveal('世界和平', { local: true });
 
     // ② 四字正停着的时候，成就从右上角划进来，同时放那段音频
     later(() => {
@@ -236,7 +236,7 @@ async function submit() {
 
 <template>
   <!-- 这一页的背景就是那片星光（和控制台同一片） -->
-  <StarBackdrop />
+  <StarBackdrop plain />
 
   <div class="auth-page">
     <div class="auth-card glass reveal">

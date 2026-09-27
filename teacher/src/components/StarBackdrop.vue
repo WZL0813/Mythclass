@@ -13,6 +13,8 @@ const props = defineProps({
   shapeCount: { type: Number, default: 700 }, // 组成字的星子
   freeCount: { type: Number, default: 130 }, // 到处漂的星子
   speed: { type: Number, default: 0.3 },
+  // 只要一片散星，不拼字（注册/登录页要的是"全程散的星光"）
+  plain: { type: Boolean, default: false },
 });
 
 const canvas = ref(null);
@@ -65,7 +67,7 @@ function measureTargets() {
 }
 
 function seed() {
-  const targets = measureTargets();
+  const targets = props.plain ? [] : measureTargets();
 
   stars = targets.map(([tx, ty]) => ({
     tx,
@@ -78,7 +80,9 @@ function seed() {
     color: COLORS[Math.floor(Math.random() * COLORS.length)],
   }));
 
-  free = Array.from({ length: props.freeCount }, () => ({
+  // 不拼字的时候，把星的密度补足，才像一片星空
+  const freeN = props.plain ? Math.max(props.freeCount, 420) : props.freeCount;
+  free = Array.from({ length: freeN }, () => ({
     x: Math.random() * w,
     y: Math.random() * h,
     size: 0.5 + Math.random() * 1.4,

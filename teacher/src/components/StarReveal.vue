@@ -12,6 +12,8 @@ const props = defineProps({
   text: { type: String, default: 'Mythclass' },
     // 只让星光浮起来、乱闪，不拼字（注册过场那种）
     plain: { type: Boolean, default: false },
+    // 星子从**屏幕内**就地起步（背景本来那片星发亮聚拢），不是从外面飞进来
+    local: { type: Boolean, default: false },
   starsFor: { type: Number, default: 850 }, // 先乱闪多久
   gatherFor: { type: Number, default: 1750 }, // 汇聚用时
   holdFor: { type: Number, default: 900 }, // 汇成后停多久
@@ -100,6 +102,19 @@ function seed() {
   const targets = measureTargets();
 
   stars = targets.map(([tx, ty]) => {
+    // local：起点就在屏幕里 —— 看着是背景那片星自己发亮、聚拢
+    if (props.local) {
+      return {
+        sx: Math.random() * w,
+        sy: Math.random() * h,
+        tx,
+        ty,
+        size: 0.7 + Math.random() * 1.5,
+        delay: Math.random() * 0.24,
+        twinkle: Math.random() * Math.PI * 2,
+        color: PALETTE[Math.floor(Math.random() * PALETTE.length)],
+      };
+    }
     // 起点撒在画面外的四周，看着像是从外面飘进来
     const roll = Math.random();
     let sx;
@@ -209,8 +224,9 @@ onMounted(async () => {
   const calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const k = calm ? 0.25 : 1;
   timings = {
-    stars: props.starsFor * k,
-    gather: props.plain ? 420 : props.gatherFor * k,
+    // local：几乎不"先乱闪"，直接就开始发亮聚拢
+    stars: props.local ? 320 : props.starsFor * k,
+    gather: props.plain ? 420 : (props.local ? 1600 : props.gatherFor * k),
     hold: props.plain ? 420 : props.holdFor * k, // 只浮现星光时不用停那么久
   };
 

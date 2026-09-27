@@ -75,7 +75,7 @@ async function submit() {
 
 <template>
   <!-- 这一页的背景就是那片星光（和控制台同一片） -->
-  <StarBackdrop />
+  <StarBackdrop plain />
 
   <div class="auth-page">
     <div class="auth-card glass reveal">

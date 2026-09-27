@@ -8,6 +8,7 @@ import {
   closeStarReveal,
   pageVeiled,
   revealActive,
+  revealLocal,
   revealPlain,
   revealText,
   unveilPage,
@@ -53,6 +54,7 @@ onMounted(async () => {
           v-if="revealActive"
           :text="revealText"
           :plain="revealPlain"
+          :local="revealLocal"
           @unveil="unveilPage"
           @closed="closeStarReveal"
         />

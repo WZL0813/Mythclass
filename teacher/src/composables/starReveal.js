@@ -11,6 +11,7 @@ import { ref } from 'vue';
 export const revealActive = ref(false); // 星幕在不在
 export const revealText = ref('Mythclass'); // 星幕要拼成什么字
 export const revealPlain = ref(false); // 只浮现星光、不拼字
+export const revealLocal = ref(false); // 星子就地起步（背景发亮聚拢）
 export const pageVeiled = ref(false); // 底下的页面是不是全透明
 
 let resolveDone = null;
@@ -19,6 +20,7 @@ let resolveDone = null;
 export function playStarReveal(text = 'Mythclass', opts = {}) {
   revealText.value = text || 'Mythclass';
   revealPlain.value = !!opts.plain;
+  revealLocal.value = !!opts.local;
   revealActive.value = true;
   pageVeiled.value = true;
   return new Promise((resolve) => {
