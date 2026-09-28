@@ -16,6 +16,8 @@ const auth = useAuthStore();
 
 const tab = ref('screen');
 const selectedId = ref(null);
+// 上次看的是哪台：刷新后还要能直接用「切换局域网界面」
+const LAST_CLIENT_KEY = 'mythclass.teacher.clientId';
 const loading = ref(true);
 
 /**
@@ -344,6 +346,8 @@ function selectClient(client) {
   }
 
   selectedId.value = client.id;
+  // 导航栏那个「切换局域网界面」要知道现在选的是哪台 —— 存一份给外面看
+  localStorage.setItem('mythclass.teacher.clientId', String(client.id));
   frameSrc.value = '';
   frameFps.value = 0;
   frameSize.value = '';

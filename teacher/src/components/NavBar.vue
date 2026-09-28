@@ -78,13 +78,9 @@ function go(to) {
 
 /** 注册也走一遍星光：界面先隐掉，星光慢慢浮起来，再显注册页 */
 function openLanUi() {
-  // 用当前选中的那台机器；没选就先去控制台选
-  const id = auth.selectedClientId || '';
-  if (!id) {
-    router.push('/dashboard');
-    return;
-  }
-  router.push({ name: 'localwebui', query: { clientId: id } });
+  // 直接进页面；连哪台让页面自己去问（带上次选的那台只是个提示）
+  const last = localStorage.getItem('mythclass.teacher.clientId') || '';
+  router.push(last ? { name: 'localwebui', query: { clientId: last } } : { name: 'localwebui' });
 }
 
 function goRegister() {
