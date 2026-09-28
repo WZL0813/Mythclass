@@ -19,6 +19,13 @@ const routes = [
     component: () => import('@/views/DashboardView.vue'),
     meta: { title: '控制台 · Mythclass', requiresAuth: true },
   },
+  {
+    path: '/localwebui',
+    name: 'localwebui',
+    component: () => import('@/views/LocalWebView.vue'),
+    // 这个页面自带整套界面：全屏显示，不套教师端导航栏
+    meta: { title: '局域网界面 · Mythclass', requiresAuth: true, fullscreen: true },
+  },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ];
 

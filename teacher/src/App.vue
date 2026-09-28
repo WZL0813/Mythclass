@@ -36,15 +36,24 @@ onMounted(async () => {
 
 <template>
   <div class="app-shell" :class="{ veiled: pageVeiled }">
-    <NavBar :theme="theme" @toggle-theme="applyTheme(theme === 'dark' ? 'light' : 'dark')" />
+    <NavBar
+      v-if="!route.meta.fullscreen"
+      :theme="theme"
+      @toggle-theme="applyTheme(theme === 'dark' ? 'light' : 'dark')"
+    />
 
-    <main :class="['app-main', { 'is-dashboard': route.name === 'dashboard' }]">
+    <main
+      :class="[
+        'app-main',
+        { 'is-dashboard': route.name === 'dashboard', 'is-full': route.meta.fullscreen },
+      ]"
+    >
       <router-view v-slot="{ Component }">
         <component :is="Component" />
       </router-view>
     </main>
 
-    <FooterBar v-if="route.name !== 'dashboard'" />
+    <FooterBar v-if="route.name !== 'dashboard' && !route.meta.fullscreen" />
 
     <!-- 登录成功那一下的星光汇聚。
          必须 teleport 到 body：.app-shell 隐身时是 opacity:0，

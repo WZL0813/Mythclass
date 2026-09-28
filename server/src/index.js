@@ -98,7 +98,7 @@ app.get('/healthz', (req, res) => {
 app.get('/api/meta', (req, res) => {
   res.json({
     service: 'Mythclass 服务端',
-    version: '3.0.0.11',
+    version: '3.0.0.12',
     features: [
       'client-teachers', // 客户端可拉取绑定老师（本地网页要用）
       'local-ips', // 记录客户端上报的内网 IP
@@ -117,6 +117,7 @@ app.get('/api/auth/registration-status', (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/client', clientRoutes);
+app.use('/api/lan', require('./routes/lan'));
 app.use('/api/admin', adminRoutes);
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'NOT_FOUND', message: '接口不存在' }));

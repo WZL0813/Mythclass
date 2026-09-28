@@ -67,6 +67,32 @@ function visitorIp(request) {
   return String(addr).replace(/^::ffff:/, '');
 }
 
+// 等客户端回话的那些请求：id -> {resolve, timer}
+const pendingAsks = new Map();
+let askSeq = 0;
+
+/**
+ * 让某台一体机干点事，并等它回话。
+ * 客户端侧用同样的 event 收到请求，回 `<event>_result`（带 id）。
+ */
+function askClient(clientId, event, payload = {}, timeoutMs = 25000) {
+  const id = Number(clientId);
+  return new Promise((resolve) => {
+    if (!clientSockets.has(id) || clientSockets.get(id).size === 0) {
+      resolve({ ok: false, error: '这台机器不在线' });
+      return;
+    }
+    askSeq += 1;
+    const askId = `${Date.now().toString(36)}-${askSeq}`;
+    const timer = setTimeout(() => {
+      pendingAsks.delete(askId);
+      resolve({ ok: false, error: '等它回话等太久了' });
+    }, Math.max(3000, Number(timeoutMs) || 25000));
+    pendingAsks.set(askId, { resolve, timer });
+    sendToClient(id, event, { ...payload, id: askId });
+  });
+}
+
 function sendToClient(clientId, event, payload) {
   const set = clientSockets.get(Number(clientId));
   if (!set || set.size === 0) return false;
@@ -211,6 +237,15 @@ function bindClient(socket) {
   socket.emit('registered', { clientId, relayEnabled: config.relayEnabled });
 
   // 心跳：刷新 last_seen，并回执
+  // 一体机回的中转结果
+  socket.on('lan_relay_result', (payload = {}) => {
+    const wait = pendingAsks.get(String(payload.id || ''));
+    if (!wait) return;
+    pendingAsks.delete(String(payload.id || ''));
+    clearTimeout(wait.timer);
+    wait.resolve({ ok: true, ...payload });
+  });
+
   socket.on('heartbeat', (payload) => {
     // 顺便记下客户端实际在用的局域网端口（系统占用时它会自己换）
     if (payload && typeof payload === 'object') {
@@ -246,6 +281,12 @@ function bindClient(socket) {
   socket.on('control_event', relay('control_event')); // 老师自己也控制时用于回显
 
   socket.on('disconnect', () => {
+    // 这台机器走了：它欠的请求都放掉，别让老师那边白等到超时
+    for (const [askId, wait] of pendingAsks) {
+      clearTimeout(wait.timer);
+      wait.resolve({ ok: false, error: '这台机器断线了' });
+      pendingAsks.delete(askId);
+    }
     const set = clientSockets.get(clientId);
     if (set) {
       set.delete(socket.id);
@@ -371,6 +412,7 @@ function bindTeacher(socket) {
 }
 
 module.exports = {
+  askClient,
   init,
   stats,
   sendToClient,

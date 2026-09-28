@@ -77,6 +77,16 @@ function go(to) {
 }
 
 /** 注册也走一遍星光：界面先隐掉，星光慢慢浮起来，再显注册页 */
+function openLanUi() {
+  // 用当前选中的那台机器；没选就先去控制台选
+  const id = auth.selectedClientId || '';
+  if (!id) {
+    router.push('/dashboard');
+    return;
+  }
+  router.push({ name: 'localwebui', query: { clientId: id } });
+}
+
 function goRegister() {
   playStarRevealThen(() => router.push('/register'), '', { plain: true });
 }
@@ -124,6 +134,17 @@ function logout() {
           <iconify-icon :icon="theme === 'dark' ? 'ph:sun' : 'ph:moon-stars'"></iconify-icon>
         </button>
 
+        <!-- 局域网界面：和一体机自己的控制台同一个页面，走服务器中转 -->
+        <button
+          v-if="loggedIn"
+          class="btn small ghost lan-btn"
+          title="和一体机自己的局域网控制台是同一个界面，走服务器中转"
+          @click="openLanUi"
+        >
+          <iconify-icon icon="ph:monitor-duotone" width="15" />
+          切换局域网界面
+        </button>
+
         <template v-if="!loggedIn">
           <button class="btn small ghost" @click="go('/login')">登录</button>
           <button class="btn small primary" @click="goRegister">注册</button>
@@ -146,6 +167,14 @@ function logout() {
 </template>
 
 <style scoped>
+  /* 局域网界面那个按钮：跟旁边的小控件对齐 */
+  .lan-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 6px;
+  }
+
 /* 收起来的导航栏：整条滑出屏幕上方 */
 .nav.tucked {
   transform: translateY(-100%);
