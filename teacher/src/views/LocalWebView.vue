@@ -189,7 +189,17 @@ async function load() {
     const patch = patchSource(target);
     html.value = raw.includes('</head>') ? raw.replace('</head>', patch + '</head>') : patch + raw;
   } catch (err) {
-    failure.value = err.message || String(err);
+    const msg = err.message || String(err);
+    // 把"到底哪儿不对"说清楚：服务器没更新 / 机器没上线 / 网络不通
+    if (/连不上服务端|请求超时/.test(msg)) {
+      failure.value =
+        '服务器那边没应这个接口。多半是服务端还没更新到带中转的版本 —— ' +
+        '去服务器上 git pull 再重启一次。';
+    } else if (/NOT_FOUND|接口不存在/.test(msg)) {
+      failure.value = '服务器没有 /api/lan/relay 这个接口，先把服务端更新一下。';
+    } else {
+      failure.value = msg;
+    }
   } finally {
     loading.value = false;
   }
@@ -215,7 +225,7 @@ onMounted(load);
     <p v-else-if="failure" class="note bad">
       {{ failure }}
       <br />
-      这台机器得在线才行；它在线的话，检查一下它的版本是不是新的。
+      要么服务端没更新，要么这台机器没连上服务器（它的版本也得是 3.0.0.13 以上）。
     </p>
     <iframe v-else class="frame" :srcdoc="html" title="局域网界面"></iframe>
   </div>
