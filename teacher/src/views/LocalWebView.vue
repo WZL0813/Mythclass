@@ -11,7 +11,7 @@
  * 好处：老师那边网络再乱也能用 —— 只要一体机连着服务器就行。
  * 代价：数据要先过一趟服务器（比直连慢一点）。
  */
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { HTTP_BASE, request, tokenStore } from '@/api';
 
