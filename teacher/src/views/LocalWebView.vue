@@ -155,6 +155,13 @@ function patchSource(cid = 0) {
     '        // 抓不到时一体机回的是 JSON（写着为什么）。这种情况别接管 ——',
     '        // 把原始地址放回去，页面自己会把原因读出来显示，跟直连时一样。',
     '        if (r.status !== 200 || ctype.indexOf("image/") !== 0) {',
+    '          // 抓不到：把一体机说的原因抠出来，报给教师端显示（页面自己写得太含糊）',
+    '          r.json().then(function (d) {',
+    '            var why = (d && (d.message || d.error)) || "抓不到画面";',
+    '            try { window.parent.postMessage({ mythFrameError: why }, "*"); } catch (e) {}',
+    '            var hint = document.getElementById("hint");',
+    '            if (hint) hint.textContent = why;',
+    '          }).catch(function () {});',
     '          realSrc.set.call(el, url);',
     '          return null;',
     '        }',
@@ -235,6 +242,16 @@ async function load() {
   }
 }
 
+const frameNote = ref('');
+
+function onMessage(event) {
+  const why = event && event.data && event.data.mythFrameError;
+  if (why) frameNote.value = String(why);
+}
+
+onMounted(() => window.addEventListener('message', onMessage));
+onBeforeUnmount(() => window.removeEventListener('message', onMessage));
+
 function back() {
   router.push('/dashboard');
 }
@@ -248,6 +265,7 @@ onMounted(load);
       <button class="btn small" @click="back">← 回控制台</button>
       <span class="who">{{ clientName || '局域网界面' }}</span>
       <span class="tag">走服务器中转</span>
+      <span v-if="frameNote" class="warn">{{ frameNote }}</span>
       <button class="btn small ghost" @click="load">重新加载</button>
     </div>
 
