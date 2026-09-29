@@ -1053,19 +1053,47 @@ const rateText = computed(() => {
   return r < 0 ? `${r}（慢）` : `+${r}（快）`;
 });
 
-async function testVoice() {
-  const text = notice.value.body || notice.value.title || '这是一条语音播报试听';
+/**
+ * 试听：在**老师这台电脑上**念一遍。
+ *
+ * 以前是发 speak 命令给教室那台机器 —— 结果响在教室里，老师这边听不到，
+ * 音量语速是不是合适根本判断不了。浏览器有现成的语音合成，本地念最直观。
+ * （真正的播报还是客户端用系统语音念，这里只是"听听大概什么效果"。）
+ */
+function testVoice() {
+  const n = notice.value;
+  const parts = n.voiceParts || [];
+
+  // 和客户端一个语义：没勾任何一项 = 什么都不念
+  if (parts.length === 0) {
+    return toast.warning('「念哪些」一个都没勾，播报不会出声');
+  }
+
+  const seq = (n.voiceOrder || []).length ? n.voiceOrder : ['title', 'body'];
+  const pieces = [];
+  for (const key of seq) {
+    if (key === 'title' && parts.includes('title') && n.title) pieces.push(n.title);
+    if (key === 'body' && parts.includes('body') && n.body) pieces.push(n.body);
+  }
+  const text = pieces.join('。') || n.body || n.title || '这是一条语音播报试听';
+
+  if (!('speechSynthesis' in window)) {
+    return toast.warning('这个浏览器不支持本地试听，装到教室那台上才是真的声音');
+  }
+
   try {
-    const ack = await auth.sendCommand(selectedId.value, 'speak', {
-      title: notice.value.title || '',
-      body: text,
-      voiceParts: notice.value.voiceParts || [],
-      voiceOrder: notice.value.voiceOrder || [],
-      voiceVolume: Number(notice.value.voiceVolume) || 0,
-      voiceRate: Number(notice.value.voiceRate) || 0,
-      voiceName: notice.value.voiceName || '',
-    });
-    toast.info((ack && ack.output) || '发过去了');
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.volume = Math.min(1, Math.max(0, (Number(n.voiceVolume) || 0) / 100));
+    const rate = Number(n.voiceRate) || 0;
+    utter.rate = Math.min(2, Math.max(0.1, 1 + rate * 0.1)); // -10~10 映射成 0~2 倍速
+    const want = String(n.voiceName || '');
+    if (want) {
+      const hit = (window.speechSynthesis.getVoices() || []).find((v) => v.name === want);
+      if (hit) utter.voice = hit;
+    }
+    window.speechSynthesis.speak(utter);
+    toast.info('在你自己的电脑上试听（教室那台不会响）');
   } catch (err) {
     toast.error(err.message || '试听失败');
   }
