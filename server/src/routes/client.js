@@ -151,9 +151,28 @@ router.get('/update', updaterLimit, (req, res) => {
     url = `${base}/api/client/download/${encodeURIComponent(row.file)}`;
   }
 
+  // 客户端问「我是不是最新的」时，把它**这一版**的说明和发布时间也带回去
+  let currentNotes = '';
+  let currentPublishedAt = '';
+  try {
+    if (!newer && current) {
+      const mineRow = db
+        .prepare('SELECT notes, created_at FROM releases WHERE platform = ? AND version = ? ORDER BY id DESC LIMIT 1')
+        .get(platform, current);
+      if (mineRow) {
+        currentNotes = mineRow.notes || '';
+        currentPublishedAt = mineRow.created_at || '';
+      }
+    }
+  } catch (_) {
+    /* 老库没这张表就算了 */
+  }
+
   res.json({
     update: newer,
     current,
+    currentNotes,
+    currentPublishedAt,
     latest: row.version,
     url: newer ? url : '',
     notes: newer ? row.notes : '',
