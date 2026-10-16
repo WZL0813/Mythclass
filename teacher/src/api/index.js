@@ -3,6 +3,12 @@
  * - 配置：VITE_SERVER_URL 留空 = 同源（本地开发走 vite 代理）
  * - REST：/api/auth/*  带 Bearer token
  * - WebSocket：socket.io，握手时把 token 塞进 auth
+ *
+ * ⚠️ 这个地址是**打包时写死进去的**（import.meta.env 是编译期替换）：
+ *    换了服务器域名 / 换了隧道，只改代码里的常量没用 ——
+ *    必须在构建环境里设置 VITE_SERVER_URL（EdgeOne 就在「环境变量」里配），
+ *    然后**重新构建**才生效。构建完可以在页面 Ctrl+U 搜一下域名，
+ *    确认打进去的是新地址。
  */
 
 import { io } from 'socket.io-client';
