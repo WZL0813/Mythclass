@@ -1,6 +1,54 @@
 import { defineStore } from 'pinia';
 import { api, tokenStore, connectSocket, disconnectSocket } from '@/api';
 
+/**
+ * 发出去的命令在等回执：requestId -> resolve
+ *
+ * 为什么需要：`socket.emit('command', ..., ack)` 那个 ack 只是**服务端**说
+ * "我转给那台机器了"，命令真正的执行结果是从另一条路上回来的
+ * （command_result）。以前 sendCommand 直接把那个 ack 当结果用，
+ * 于是「使用时长 / 磁盘 / 窗口」这些页永远拿到空数据 —— 它们读到的是
+ * `{ok: true, delivered: true}`，里面根本没有 output。
+ */
+const pendingCommands = new Map();
+let cmdSeq = 0;
+
+/**
+ * 同一条回执可能来两遍：一条走 socket 中转（给正在看这台机器的页面），
+ * 一条走 HTTP 回执（发给这个账号的所有页面）。两边内容一样，去个重，
+ * 不然回执栏会一行变两行、通知回答的弹窗也会弹两次。
+ */
+const seenResults = new Map();
+const RESULT_DEDUP_MS = 15000;
+
+function resultKey(payload) {
+  return [
+    payload.requestId || '',
+    payload.command || '',
+    payload.ok ? 1 : 0,
+    String(payload.output || '').slice(0, 160),
+  ].join('|');
+}
+
+/**
+ * 这条回执是不是被截断了？
+ *
+ * 客户端会把同一条结果发两遍：socket 那条是完整的，HTTP 那条服务端会截断。
+ * 一旦截在 JSON 中间，页面 JSON.parse 出来就是空的 —— 表格看着像"没数据"。
+ * 所以 HTTP 那份要是明显被截了，就先别用，等 socket 那份完整的来。
+ */
+function looksTruncated(payload) {
+  const out = String(payload.output || '');
+  if (out.length < 1500) return false; // 这么短的输出不可能被截
+  if (!/^[[{]/.test(out)) return false; // 不是 JSON 就别瞎猜
+  try {
+    JSON.parse(out);
+    return false;
+  } catch (_) {
+    return true;
+  }
+}
+
 /** 登录态 + 客户端列表 */
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -100,7 +148,31 @@ export const useAuthStore = defineStore('auth', {
       if (onFrame) socket.on('screen_frame', onFrame);
       if (onAudio) socket.on('audio_info', onAudio);
       if (onFileLog) socket.on('file_log', onFileLog);
-      if (onCommandResult) socket.on('command_result', onCommandResult);
+
+      socket.on('command_result', (payload) => {
+        if (!payload) return;
+
+        // HTTP 那条被截断的版本直接不要：等 socket 那份完整的
+        if (payload.at && looksTruncated(payload)) return;
+
+        // 去重：同一条回执从两条路上各来一次
+        const key = resultKey(payload);
+        const now = Date.now();
+        for (const [k, at] of seenResults) {
+          if (now - at > RESULT_DEDUP_MS) seenResults.delete(k);
+        }
+        if (seenResults.has(key)) return;
+        seenResults.set(key, now);
+
+        // 谁在等这条回执就把结果交给它（sendCommand 的 Promise）
+        const wait = payload.requestId ? pendingCommands.get(payload.requestId) : null;
+        if (wait) {
+          pendingCommands.delete(payload.requestId);
+          wait(payload);
+        }
+
+        if (onCommandResult) onCommandResult(payload);
+      });
 
       return socket;
     },
@@ -119,15 +191,24 @@ export const useAuthStore = defineStore('auth', {
       if (!this.socket || !this.socket.connected) {
         return Promise.resolve({ ok: false, error: 'OFFLINE' });
       }
+      cmdSeq += 1;
+      const requestId = `t${Date.now().toString(36)}-${cmdSeq}`;
       return new Promise((resolve) => {
         let done = false;
-        this.socket.emit('command', { clientId, command, args, requestId: `${Date.now()}` }, (ack) => {
+        const finish = (value) => {
+          if (done) return;
           done = true;
-          resolve(ack || { ok: false });
+          clearTimeout(timer);
+          pendingCommands.delete(requestId);
+          resolve(value);
+        };
+        // 命令真跑到那台机器上再回来，慢点也等它；等不到就当超时
+        const timer = setTimeout(() => finish({ ok: false, error: 'TIMEOUT' }), 12000);
+        pendingCommands.set(requestId, finish);
+        this.socket.emit('command', { clientId, command, args, requestId }, (ack) => {
+          // 这个 ack 只代表「服务端收下并转发了」；机器不在线才会是失败
+          if (ack && ack.ok === false) finish({ ok: false, error: ack.error || 'OFFLINE' });
         });
-        setTimeout(() => {
-          if (!done) resolve({ ok: false, error: 'TIMEOUT' });
-        }, 4000);
       });
     },
 

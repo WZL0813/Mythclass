@@ -63,8 +63,8 @@ const links = computed(() =>
 
 function go(to) {
   menuOpen.value = false;
-  // 走导航 = 离开那套界面，回来还是原来的控制台
-  ui.setLan(false);
+  // 走导航 = 离开那套新样子，回来还是原来的控制台
+  ui.setLook(false);
   // 进控制台也走一遍星光，和登录/注册一致
   if (to === '/dashboard') {
     playStarRevealThen(() => router.push('/dashboard'));
@@ -82,17 +82,16 @@ function go(to) {
 }
 
 /**
- * 「新界面」：就在控制台这一页里换成局域网控制台，地址栏不变；
- * 按钮自己会变成「旧界面」，再点一下就回来。
- * 老地址 /localwebui?clientId=1 照样能用，只是不再摆按钮指过去。
+ * 「新界面」：就在控制台这一页里换个样子（功能一模一样，还是教师端自己发命令）。
+ * 地址栏一个字不动；按钮自己会变成「旧界面」，再点一下回来。
+ * 老地址 /localwebui?clientId=1 还留着，那是走服务器中转的那套。
  */
 const onDashboard = computed(() => route.name === 'dashboard');
-const canSwitch = computed(() => onDashboard.value && ui.clientId > 0);
-const lanLabel = computed(() => (ui.lanMode ? '旧界面' : '新界面'));
+const lookLabel = computed(() => (ui.newLook ? '旧界面' : '新界面'));
 
-function toggleLanUi() {
-  if (!canSwitch.value) return;
-  ui.toggleLan();
+function toggleLook() {
+  if (!onDashboard.value) return;
+  ui.toggleLook();
 }
 
 function goRegister() {
@@ -142,20 +141,15 @@ function logout() {
           <iconify-icon :icon="theme === 'dark' ? 'ph:sun' : 'ph:moon-stars'"></iconify-icon>
         </button>
 
-        <!-- 新界面：就地换成局域网控制台，地址栏不动；再点一下回旧的 -->
+        <!-- 新界面：同一个控制台换个新样子，地址栏不动；再点一下回旧的 -->
         <button
           v-if="loggedIn && onDashboard"
           class="btn small ghost lan-btn"
-          :disabled="!canSwitch"
-          :title="
-            canSwitch
-              ? (ui.lanMode ? '回到原来的控制台界面' : '就在这一页换成局域网控制台（地址不变）')
-              : '先在控制台里选一台机器'
-          "
-          @click="toggleLanUi"
+          :title="ui.newLook ? '回到原来的那个界面' : '换个新样子（功能一样，还是本机直连那套）'"
+          @click="toggleLook"
         >
           <iconify-icon icon="ph:monitor-duotone" width="15" />
-          {{ lanLabel }}
+          {{ lookLabel }}
         </button>
 
         <template v-if="!loggedIn">

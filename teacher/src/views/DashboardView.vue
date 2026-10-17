@@ -1690,7 +1690,10 @@ function fmtTime(t) {
 </script>
 
 <template>
-  <div class="dash" :class="{ 'rail-off': !railOpen, 'events-off': !eventsOpen }">
+  <div
+    class="dash"
+    :class="{ 'rail-off': !railOpen, 'events-off': !eventsOpen, 'skin-new': ui.newLook }"
+  >
     <!-- 背后的星光，和登录过场同一片 -->
     <StarBackdrop />
 
@@ -2870,5 +2873,162 @@ th { color: var(--sage); font-weight: 500; font-size: 12.4px; }
   .rail { border-right: 0; border-bottom: 1px solid var(--line); }
   .client-list { grid-auto-flow: column; overflow-x: auto; }
   .two { grid-template-columns: 1fr; }
+}
+
+/* ==========================================================================
+   新界面（skin-new）
+   --------------------------------------------------------------------------
+   主人要的：控制台换个新样子，但**功能一模一样**、也**不套局域网那页**
+   （还是教师端自己发命令、自己收画面）。所以这里只动排版和样式，不动逻辑：
+     · 左边那列机器墙 -> 顶部一条横向机器带
+     · 一排 tab -> 一颗分段选择器
+     · 卡片换圆角、换质感，事件栏收到右边一条
+     · 主色仍是苔绿，暖色用一点点琥珀，不许紫
+   ========================================================================== */
+.dash.skin-new {
+  grid-template-columns: minmax(0, 1fr) var(--ev-w, 286px);
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+/* 机器带：横着一条，缩略图小一点，名字跟在后头 */
+.dash.skin-new .rail {
+  grid-column: 1;
+  grid-row: 2;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 22px 12px;
+  border-right: 0;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(63, 107, 82, 0.18), transparent 92%);
+}
+.dash.skin-new .rail-head { flex: 0 0 auto; }
+.dash.skin-new .rail-sum { order: 3; margin: 0 0 0 auto; flex: 0 0 auto; }
+.dash.skin-new .client-grid {
+  order: 2;
+  flex: 1 1 auto;
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  align-content: center;
+  padding: 2px 0;
+}
+.dash.skin-new .cell {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 13px 6px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(143, 168, 142, 0.24);
+  background: rgba(10, 16, 12, 0.55);
+  transition: border-color 0.18s, background 0.18s;
+}
+.dash.skin-new .cell:hover { background: rgba(243, 239, 227, 0.06); }
+.dash.skin-new .cell.active {
+  background: linear-gradient(135deg, rgba(63, 107, 82, 0.55), rgba(201, 123, 60, 0.22));
+  border-color: rgba(143, 168, 142, 0.55);
+}
+.dash.skin-new .cell .thumb {
+  width: 46px;
+  aspect-ratio: 16 / 11;
+  border-radius: 9px;
+  flex: 0 0 auto;
+}
+.dash.skin-new .cell .thumb-empty iconify-icon { font-size: 15px; }
+.dash.skin-new .cell .cname { font-size: 12.6px; text-align: left; white-space: nowrap; }
+.dash.skin-new .cell .live { top: 4px; right: 4px; width: 7px; height: 7px; }
+
+/* 工作区：占满中间，事件栏挪到右边一整条 */
+.dash.skin-new .work {
+  grid-column: 1;
+  grid-row: 3;
+  padding: 24px 26px 56px;
+}
+.dash.skin-new .events {
+  grid-column: 2;
+  grid-row: 2 / 4;
+  border-left: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(63, 107, 82, 0.12), rgba(8, 12, 9, 0.55) 40%);
+}
+.dash.skin-new .work-head { margin-bottom: 20px; }
+.dash.skin-new .work-head h1 { font-size: 26px; letter-spacing: 0.01em; }
+
+/* tab：一排下划线换成分段选择器 */
+.dash.skin-new .tabs {
+  display: inline-flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  padding: 5px;
+  border: 1px solid rgba(143, 168, 142, 0.26);
+  border-radius: 999px;
+  background: rgba(8, 14, 10, 0.45);
+}
+.dash.skin-new .tab {
+  border-bottom: 0;
+  border-radius: 999px;
+  padding: 8px 15px;
+  font-size: 13.5px;
+  white-space: nowrap;
+}
+.dash.skin-new .tab.active {
+  color: #edf5ee;
+  font-weight: 600;
+  background: linear-gradient(135deg, rgba(63, 107, 82, 0.62), rgba(201, 123, 60, 0.26));
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.26);
+}
+
+/* 卡片、工具条：圆一点、有点厚度 */
+.dash.skin-new .card,
+.dash.skin-new .pane-bar {
+  border-radius: 20px;
+  border: 1px solid rgba(143, 168, 142, 0.24);
+  background: linear-gradient(180deg, rgba(20, 29, 23, 0.92), rgba(11, 17, 13, 0.95));
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.28);
+}
+.dash.skin-new .pane { gap: 18px; }
+.dash.skin-new .stage {
+  border-radius: 22px;
+  min-height: 380px;
+  box-shadow: inset 0 0 90px rgba(63, 107, 82, 0.16);
+}
+.dash.skin-new .cmd {
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(20, 29, 23, 0.92), rgba(11, 17, 13, 0.95));
+}
+.dash.skin-new .cmd:hover:not(:disabled) { border-color: rgba(201, 123, 60, 0.5); }
+
+/* 顶上那排工具：更窄一点、悬停带点暖色 */
+.dash.skin-new .top-bar {
+  gap: 2px;
+  padding: 8px 18px;
+  background: linear-gradient(180deg, rgba(12, 18, 14, 0.92), rgba(12, 18, 14, 0.5));
+}
+.dash.skin-new .tool { min-width: 62px; border-radius: 12px; }
+.dash.skin-new .tool:hover:not(:disabled) {
+  background: rgba(201, 123, 60, 0.12);
+  border-color: rgba(201, 123, 60, 0.42);
+  color: #f4eee2;
+}
+
+@media (max-width: 1180px) {
+  .dash.skin-new { grid-template-columns: minmax(0, 1fr); }
+  .dash.skin-new .events { display: none; }
+}
+@media (max-width: 1000px) {
+  .dash.skin-new .rail { flex-wrap: wrap; }
+  .dash.skin-new .rail-sum { margin-left: 0; }
+  .dash.skin-new .work { padding: 18px 16px 40px; }
+  /* 手机上一排 tab 会挤成一列竖排，改成横着滑 */
+  .dash.skin-new .tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    width: 100%;
+    overflow-x: auto;
+    border-radius: 16px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .dash.skin-new .tab { flex: 0 0 auto; }
 }
 </style>

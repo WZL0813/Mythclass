@@ -1,31 +1,29 @@
 import { defineStore } from 'pinia';
 
 /**
- * 控制台的两套界面：老的控制台 / 新的局域网控制台
+ * 控制台要不要用「新界面」
  *
- * 为什么用状态切、不用路由切：
- * 主人要求点「新界面」时**地址栏不许变** —— 走路由就会变成
- * /localwebui?clientId=1，那不是"切界面"，那是"换页面"。
+ * 主人定的：新界面**不套局域网那页**（不走服务器中转），
+ * 功能和控制台本身一样（都是教师端自己发命令、自己收画面），
+ * 只是换个新样子；再点一下回到旧界面。
  *
- * 那条老地址 /localwebui?clientId=1 照样能用（有人会用就自己敲），
- * 只是教师端不再摆按钮指向它。
+ * 所以这里只记一个开关，地址栏一个字都不动 —— 不换路由。
+ * 老地址 /localwebui?clientId=1 还留着，那是走中转的那套，给会用的人自己敲。
  */
-const CLIENT_KEY = 'mythclass.teacher.clientId';
-
 export const useUiStore = defineStore('ui', {
   state: () => ({
-    lanMode: false,
-    // 现在选的是哪台机器：切界面的时候要用它，刷新后也要记得
-    clientId: Number(localStorage.getItem(CLIENT_KEY) || 0) || 0,
+    newLook: false,
+    // 现在选的是哪台机器：换个界面也得知道看的是谁
+    clientId: Number(localStorage.getItem('mythclass.teacher.clientId') || 0) || 0,
   }),
 
   actions: {
-    setLan(on) {
-      this.lanMode = !!on;
+    setLook(on) {
+      this.newLook = !!on;
     },
 
-    toggleLan() {
-      this.lanMode = !this.lanMode;
+    toggleLook() {
+      this.newLook = !this.newLook;
     },
 
     /** 控制台里选了哪台机器 */
@@ -33,8 +31,8 @@ export const useUiStore = defineStore('ui', {
       const next = Number(id) || 0;
       this.clientId = next;
       try {
-        if (next) localStorage.setItem(CLIENT_KEY, String(next));
-        else localStorage.removeItem(CLIENT_KEY);
+        if (next) localStorage.setItem('mythclass.teacher.clientId', String(next));
+        else localStorage.removeItem('mythclass.teacher.clientId');
       } catch (_) {
         /* 存不了就算了，顶多刷新之后要重新选一台 */
       }
