@@ -229,7 +229,29 @@ function init(server) {
 function bindClient(socket) {
   const clientId = socket.data.clientId;
   if (!clientSockets.has(clientId)) clientSockets.set(clientId, new Set());
-  clientSockets.get(clientId).add(socket.id);
+  const set = clientSockets.get(clientId);
+
+  // 同一台机器只留最新那条连接。
+  //
+  // 为什么：教室网络一抖，一体机就重连一次。可旧连接在 TCP 上已经死了、
+  // 服务器却要等 pingTimeout（60 秒）才知道，这段时间它**还挂在名单里** ——
+  // 而下面发命令是「这台机器名下的每条连接都发一遍」，
+  // 于是一条「弹消息」被这台机器处理两遍三遍，老师看到同一个通知弹好几次。
+  // 先把新连接放进去，再收掉旧的：这样名单不会瞬间空掉，
+  // 在线状态也就不会闪一下「离线」。
+  const stale = [...set];
+  set.add(socket.id);
+  for (const sid of stale) {
+    if (sid === socket.id) continue;
+    const old = io.sockets.sockets.get(sid);
+    if (!old) continue;
+    try {
+      old.emit('connection:replaced', { reason: '这台机器又连了一次，旧连接退休' });
+    } catch (_) {
+      /* 发不出去就算了，反正要断开 */
+    }
+    old.disconnect(true);
+  }
 
   socket.join(`client:${clientId}`);
   touchClient(clientId, socket.handshake.address);
@@ -281,20 +303,25 @@ function bindClient(socket) {
   socket.on('control_event', relay('control_event')); // 老师自己也控制时用于回显
 
   socket.on('disconnect', () => {
-    // 这台机器走了：它欠的请求都放掉，别让老师那边白等到超时
-    for (const [askId, wait] of pendingAsks) {
-      clearTimeout(wait.timer);
-      wait.resolve({ ok: false, error: '这台机器断线了' });
-      pendingAsks.delete(askId);
-    }
     const set = clientSockets.get(clientId);
-    if (set) {
-      set.delete(socket.id);
-      if (set.size === 0) {
-        clientSockets.delete(clientId);
-        touchClient(clientId, null);
-        notifyPresence(clientId, false);
+    if (set) set.delete(socket.id);
+    const stillOnline = !!set && set.size > 0;
+
+    // 这台机器真的走了才放掉它欠的请求。
+    // 网络抖一下重连时，旧连接断开、新连接还在 —— 这时候把等在路上的
+    // 请求全判成"断线了"，老师那边就会莫名报错、甚至重发一遍命令。
+    if (!stillOnline) {
+      for (const [askId, wait] of pendingAsks) {
+        clearTimeout(wait.timer);
+        wait.resolve({ ok: false, error: '这台机器断线了' });
+        pendingAsks.delete(askId);
       }
+    }
+
+    if (set && set.size === 0) {
+      clientSockets.delete(clientId);
+      touchClient(clientId, null);
+      notifyPresence(clientId, false);
     }
   });
 }
