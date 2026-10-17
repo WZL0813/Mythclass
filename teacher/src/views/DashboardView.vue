@@ -1098,6 +1098,88 @@ const rateText = computed(() => {
  * 音量语速是不是合适根本判断不了。浏览器有现成的语音合成，本地念最直观。
  * （真正的播报还是客户端用系统语音念，这里只是"听听大概什么效果"。）
  */
+/** 用浏览器自带的语音合成念一段；真的开始念了返回 true */
+function speakLocally(text, { volume, rate, voice }) {
+  return new Promise((resolve) => {
+    if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
+      resolve(false);
+      return;
+    }
+    const synth = window.speechSynthesis;
+    let done = false;
+    let timer = 0;
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(ok);
+    };
+    // 900 毫秒还没开始念，就当这台浏览器念不出来
+    timer = setTimeout(() => finish(false), 900);
+
+    const go = () => {
+      try {
+        synth.cancel();
+      } catch (_) {
+        /* 没有就算了 */
+      }
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.volume = Math.min(1, Math.max(0, volume / 100));
+      utter.rate = Math.min(2, Math.max(0.1, 1 + rate * 0.1));
+      utter.lang = 'zh-CN';
+      const voices = (synth.getVoices && synth.getVoices()) || [];
+      const hit =
+        voices.find((v) => v.name === voice) ||
+        voices.find((v) => /zh|Chinese|Huihui|Xiaoxiao|Yunxi|Kangkang|Yaoyao/i.test(`${v.name} ${v.lang}`));
+      if (hit) utter.voice = hit;
+      utter.onstart = () => finish(true);
+      utter.onerror = () => finish(false);
+      try {
+        synth.speak(utter);
+      } catch (_) {
+        finish(false);
+      }
+      // 有的浏览器不发 onstart，但 speaking 会变 true
+      setTimeout(() => {
+        if (synth.speaking) finish(true);
+      }, 500);
+    };
+
+    // 音色列表可能是空的（还没加载完），等一次 voiceschanged 再念
+    const voices = (synth.getVoices && synth.getVoices()) || [];
+    if (voices.length) {
+      go();
+      return;
+    }
+    let changed = false;
+    const onVoices = () => {
+      if (changed) return;
+      changed = true;
+      try {
+        synth.onvoiceschanged = null;
+      } catch (_) {
+        /* 无所谓 */
+      }
+      go();
+    };
+    try {
+      synth.onvoiceschanged = onVoices;
+    } catch (_) {
+      /* 无所谓 */
+    }
+    setTimeout(() => {
+      if (changed) return;
+      changed = true;
+      try {
+        synth.onvoiceschanged = null;
+      } catch (_) {
+        /* 无所谓 */
+      }
+      go();
+    }, 600);
+  });
+}
+
 function testVoice() {
   const n = notice.value;
   const parts = n.voiceParts || [];
@@ -1115,26 +1197,32 @@ function testVoice() {
   }
   const text = pieces.join('。') || n.body || n.title || '这是一条语音播报试听';
 
-  if (!('speechSynthesis' in window)) {
-    return toast.warning('这个浏览器不支持本地试听，装到教室那台上才是真的声音');
-  }
+  // 音量没填就当 100 —— 以前用 (Number(x) || 0)，没填的时候会变成静音
+  const volume = Math.min(100, Math.max(0, Number(n.voiceVolume) >= 0 ? Number(n.voiceVolume) : 100));
+  const rate = Number.isFinite(Number(n.voiceRate)) ? Number(n.voiceRate) : 0;
+  const voiceName = String(n.voiceName || '');
 
-  try {
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.volume = Math.min(1, Math.max(0, (Number(n.voiceVolume) || 0) / 100));
-    const rate = Number(n.voiceRate) || 0;
-    utter.rate = Math.min(2, Math.max(0.1, 1 + rate * 0.1)); // -10~10 映射成 0~2 倍速
-    const want = String(n.voiceName || '');
-    if (want) {
-      const hit = (window.speechSynthesis.getVoices() || []).find((v) => v.name === want);
-      if (hit) utter.voice = hit;
+  speakLocally(text, { volume, rate, voice: voiceName }).then(async (started) => {
+    if (started) {
+      toast.info('在你自己的电脑上试听（教室那台不会响）');
+      return;
     }
-    window.speechSynthesis.speak(utter);
-    toast.info('在你自己的电脑上试听（教室那台不会响）');
-  } catch (err) {
-    toast.error(err.message || '试听失败');
-  }
+    // 这台浏览器念不出来（没语音包 / 被策略禁了）——那就让教室那台真的念一遍
+    if (!selectedId.value) {
+      return toast.warning('这台浏览器念不出来，先选一台机器再让它念');
+    }
+    const ack = await auth.sendCommand(selectedId.value, 'speak', {
+      title: n.title,
+      body: n.body,
+      voiceParts: parts,
+      voiceOrder: seq,
+      voiceVolume: volume,
+      voiceRate: rate,
+      voiceName,
+    });
+    if (ack && ack.ok) toast.info('浏览器念不出来，改成让教室那台念了一遍');
+    else toast.warning(`试听没成功：${(ack && ack.output) || '浏览器和这台机器都没出声'}`);
+  });
 }
 
 async function sendNotice() {

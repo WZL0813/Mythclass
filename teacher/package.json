@@ -1,7 +1,7 @@
 {
   "name": "mythclass-teacher",
   "private": true,
-  "version": "3.0.0.20",
+  "version": "3.0.0.21",
   "type": "module",
   "description": "Mythclass 鑻ユ€濈彮绾т竴浣撴満绠＄悊绯荤粺 - 鏁欏笀绔紙瀹樼綉浠嬬粛 + 宸¤鎺у埗鍙帮級",
   "scripts": {
