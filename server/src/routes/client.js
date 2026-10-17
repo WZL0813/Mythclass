@@ -401,7 +401,9 @@ router.post('/command-result', (req, res) => {
       requestId: req.body.requestId || null,
       command: req.body.command || null,
       ok: req.body.ok !== false,
-      output: String(req.body.output || '').slice(0, 2000),
+      // 截断上限别太小：list_windows / list_dir 这种回的是 JSON，
+      // 一刀切在 2000 字符上会把 JSON 切坏，教师端解析出来就是空表。
+      output: String(req.body.output || '').slice(0, 20000),
       at: new Date().toISOString(),
     });
   }
