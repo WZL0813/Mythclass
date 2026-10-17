@@ -1,8 +1,9 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import NavBar from '@/components/NavBar.vue';
 import FooterBar from '@/components/FooterBar.vue';
+import LanConsole from '@/components/LanConsole.vue';
 import StarReveal from '@/components/StarReveal.vue';
 import {
   closeStarReveal,
@@ -14,10 +15,16 @@ import {
   unveilPage,
 } from '@/composables/starReveal';
 import { useAuthStore } from '@/stores/auth';
+import { useUiStore } from '@/stores/ui';
 
 const route = useRoute();
 const auth = useAuthStore();
+const ui = useUiStore();
 const theme = ref(localStorage.getItem('mythclass.theme') || 'dark');
+
+// 「新界面」：就在控制台这一页里把内容换成局域网控制台。
+// 地址栏一个字不动 —— 所以这里是 v-if，不是换路由。
+const lanInline = computed(() => ui.lanMode && route.name === 'dashboard');
 
 function applyTheme(value) {
   theme.value = value;
@@ -48,7 +55,8 @@ onMounted(async () => {
         { 'is-dashboard': route.name === 'dashboard', 'is-full': route.meta.fullscreen },
       ]"
     >
-      <router-view v-slot="{ Component }">
+      <LanConsole v-if="lanInline" :client-id="ui.clientId" inline />
+      <router-view v-else v-slot="{ Component }">
         <component :is="Component" />
       </router-view>
     </main>

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import { toast } from '@/utils/toast';
 import { useAuthStore } from '@/stores/auth';
+import { useUiStore } from '@/stores/ui';
 import { HTTP_BASE } from '@/api';
 import { api, OFFICIAL_SERVER, SERVER_URL } from '@/api';
 import { version as appVersion } from '../../package.json';
@@ -11,6 +12,7 @@ import StarBackdrop from '@/components/StarBackdrop.vue';
 
 const router = useRouter();
 const auth = useAuthStore();
+const ui = useUiStore();
 
 /* --------------------------------- 状态 --------------------------------- */
 
@@ -107,7 +109,7 @@ function suggestDirect(client) {
   if (!sameLan) return;
   if (!lanPageUrl(client)) return; // 连地址都拿不到就别打扰人家
   if (directAsked.has(client.id)) return;
-  directAsked.add(client.id);
+  rememberDirectAsked(client.id);
   askDirect(client);
 }
 
@@ -210,7 +212,11 @@ onMounted(async () => {
 
   try {
     await auth.fetchClients();
-    if (clients.value.length) selectClient(clients.value[0]);
+    if (clients.value.length) {
+      // 优先选上次那台：从「新界面」切回来不该跳到别的机器上
+      const last = clients.value.find((c) => c.id === ui.clientId);
+      selectClient(last || clients.value[0]);
+    }
   } catch (err) {
     toast.error(err.message);
   } finally {
@@ -286,6 +292,13 @@ onBeforeUnmount(() => {
   stopStatsProbe();
   closeP2P();
   stopThumbPoll();
+  // 切「新界面」时这一页会被换掉。弹框是 teleport 到 body 的，
+  // 不关掉就会一直挂在新的界面上（比如"建议用一体机那个网页"那条）。
+  try {
+    ElMessageBox.close();
+  } catch (_) {
+    /* 没有开着的框就算了 */
+  }
   if (selectedId.value && screenOn.value) auth.sendCommand(selectedId.value, 'screen_stop');
   auth.unwatchClient(selectedId.value);
 });
@@ -346,7 +359,8 @@ function selectClient(client) {
   }
 
   selectedId.value = client.id;
-  // 导航栏那个「切换局域网界面」要知道现在选的是哪台 —— 存一份给外面看
+  // 导航栏那个「新界面」要知道现在选的是哪台 —— 存一份给外面看
+  ui.setClient(client.id);
   localStorage.setItem('mythclass.teacher.clientId', String(client.id));
   frameSrc.value = '';
   frameFps.value = 0;
@@ -573,8 +587,32 @@ function pickPrivateIp(sdp) {
   return found.find((ip) => /^(10\.|192\.168\.|172\.)/.test(ip)) || '';
 }
 
-/** 这次会话里已经问过「要不要直连」的机器，别反复打扰 */
-const directAsked = new Set();
+/**
+ * 这次会话里已经问过「要不要直连」的机器，别反复打扰。
+ *
+ * 存 sessionStorage 而不是只放内存：切「新界面」会把这一页卸载再挂回来，
+ * 纯内存的 Set 会被清空 —— 那就变成每切一次弹一次，比不提醒还烦。
+ */
+const DIRECT_ASKED_KEY = 'mythclass.dash.directAsked';
+const directAsked = new Set(
+  (() => {
+    try {
+      const raw = JSON.parse(sessionStorage.getItem(DIRECT_ASKED_KEY) || '[]');
+      return Array.isArray(raw) ? raw : [];
+    } catch (_) {
+      return [];
+    }
+  })()
+);
+
+function rememberDirectAsked(id) {
+  directAsked.add(id);
+  try {
+    sessionStorage.setItem(DIRECT_ASKED_KEY, JSON.stringify([...directAsked]));
+  } catch (_) {
+    /* 存不了就算了，顶多多问一次 */
+  }
+}
 
 /* ---------------------- 使用时长 / 磁盘 / 窗口 ---------------------- */
 

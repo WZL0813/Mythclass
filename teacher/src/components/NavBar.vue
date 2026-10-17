@@ -1,14 +1,17 @@
 <script setup>
 import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { useUiStore } from '@/stores/ui';
 import { playStarRevealThen } from '@/composables/starReveal';
 
 defineProps({ theme: { type: String, default: 'dark' } });
 const emit = defineEmits(['toggle-theme']);
 
+const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+const ui = useUiStore();
 const menuOpen = ref(false);
 
 // 导航栏收起来：省空间用。状态存本地，刷新后保持
@@ -60,6 +63,8 @@ const links = computed(() =>
 
 function go(to) {
   menuOpen.value = false;
+  // 走导航 = 离开那套界面，回来还是原来的控制台
+  ui.setLan(false);
   // 进控制台也走一遍星光，和登录/注册一致
   if (to === '/dashboard') {
     playStarRevealThen(() => router.push('/dashboard'));
@@ -76,11 +81,18 @@ function go(to) {
   }
 }
 
-/** 注册也走一遍星光：界面先隐掉，星光慢慢浮起来，再显注册页 */
-function openLanUi() {
-  // 直接进页面；连哪台让页面自己去问（带上次选的那台只是个提示）
-  const last = localStorage.getItem('mythclass.teacher.clientId') || '';
-  router.push(last ? { name: 'localwebui', query: { clientId: last } } : { name: 'localwebui' });
+/**
+ * 「新界面」：就在控制台这一页里换成局域网控制台，地址栏不变；
+ * 按钮自己会变成「旧界面」，再点一下就回来。
+ * 老地址 /localwebui?clientId=1 照样能用，只是不再摆按钮指过去。
+ */
+const onDashboard = computed(() => route.name === 'dashboard');
+const canSwitch = computed(() => onDashboard.value && ui.clientId > 0);
+const lanLabel = computed(() => (ui.lanMode ? '旧界面' : '新界面'));
+
+function toggleLanUi() {
+  if (!canSwitch.value) return;
+  ui.toggleLan();
 }
 
 function goRegister() {
@@ -130,15 +142,20 @@ function logout() {
           <iconify-icon :icon="theme === 'dark' ? 'ph:sun' : 'ph:moon-stars'"></iconify-icon>
         </button>
 
-        <!-- 局域网界面：和一体机自己的控制台同一个页面，走服务器中转 -->
+        <!-- 新界面：就地换成局域网控制台，地址栏不动；再点一下回旧的 -->
         <button
-          v-if="loggedIn"
+          v-if="loggedIn && onDashboard"
           class="btn small ghost lan-btn"
-          title="和一体机自己的局域网控制台是同一个界面，走服务器中转"
-          @click="openLanUi"
+          :disabled="!canSwitch"
+          :title="
+            canSwitch
+              ? (ui.lanMode ? '回到原来的控制台界面' : '就在这一页换成局域网控制台（地址不变）')
+              : '先在控制台里选一台机器'
+          "
+          @click="toggleLanUi"
         >
           <iconify-icon icon="ph:monitor-duotone" width="15" />
-          切换局域网界面
+          {{ lanLabel }}
         </button>
 
         <template v-if="!loggedIn">
@@ -169,6 +186,11 @@ function logout() {
     align-items: center;
     gap: 6px;
     margin-right: 6px;
+  }
+  /* 还没选机器的时候不让点：点了也没东西可连，提示写在 title 里 */
+  .lan-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
 /* 收起来的导航栏：整条滑出屏幕上方 */
