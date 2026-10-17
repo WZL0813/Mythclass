@@ -71,7 +71,7 @@ const fileOperation = ref('');
 const filePage = ref(1);
 const fileLimit = 30;
 
-const settings = ref({ maxLogCount: 5000, maxLogSize: 209715200 });
+const settings = ref({ maxLogCount: 5000, maxLogSize: 209715200 }); // 旧设置页留下的默认值，留着给别处用
 const commandLog = ref([]);
 
 /* --------------------- 极域那套：缩略图墙 + 右侧事件栏 --------------------- */
@@ -1498,26 +1498,182 @@ async function loadAudio() {
   }
 }
 
+/* -------------------------------- 命令面板 -------------------------------- */
+
+/* ---------------------------- 命令页（和局域网那页同一套用法） ---------------------------- */
+
+/** 一个命令名，直接发给那台机器（和局域网那页的 /api/command 一个意思） */
+const cmdName = ref('');
+const cmdOutput = ref('');
+const cmdBusy = ref(false);
+const COMMAND_PRESETS = ['status', 'screenshot', 'lock'];
+
+/** 回显整理：客户端有的命令回的是 JSON 字符串（比如 status），拆开更好读 */
+function prettyOut(text) {
+  const raw = String(text == null ? '' : text);
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  try {
+    const once = JSON.parse(trimmed);
+    if (typeof once === 'string') return once;
+    if (once && typeof once === 'object') return JSON.stringify(once, null, 2);
+    return String(once);
+  } catch (_) {
+    /* 不是 JSON 就原样显示 */
+  }
+  return raw;
+}
+
+async function runNamedCommand(preset) {
+  const name = String(preset || cmdName.value || '').trim();
+  if (!name || !selectedId.value) return;
+  if (preset) cmdName.value = preset;
+  cmdBusy.value = true;
+  cmdOutput.value = '执行中…';
+  try {
+    const ack = await auth.sendCommand(selectedId.value, name, {});
+    let text = (ack && (ack.output || ack.message)) || '';
+    if (!text) text = ack && ack.ok ? '做完了（这个命令没有回显）' : '没回话';
+    cmdOutput.value = prettyOut(text);
+    if (!ack || ack.ok === false) toast.warning(`${name} 没成功`);
+  } catch (err) {
+    cmdOutput.value = '出错：' + (err.message || err);
+  } finally {
+    cmdBusy.value = false;
+  }
+}
+
+/** Windows 命令行：一行一条，回显留在下面，↑↓ 翻历史 */
+const shLine = ref('');
+const shRows = ref([]);
+const shHistory = ref([]);
+let shCursor = -1;
+
+function shWrite(text, cls) {
+  shRows.value.push({ text: String(text == null ? '' : text), cls: cls || '' });
+  if (shRows.value.length > 300) shRows.value.splice(0, shRows.value.length - 300);
+}
+
+async function runShellLine(line) {
+  const command = String(line === undefined ? shLine.value : line).trim();
+  if (!command || !selectedId.value) return;
+  shHistory.value.push(command);
+  shCursor = shHistory.value.length;
+  shLine.value = '';
+  shWrite('C:\\> ' + command, 'sh-cmd');
+  try {
+    const ack = await auth.sendCommand(selectedId.value, 'shell', { command });
+    const ok = !!(ack && ack.ok);
+    shWrite((ack && ack.output) || '（没回话）', ok ? '' : 'sh-bad');
+    if (!ok) toast.warning('这条命令没跑成功');
+  } catch (err) {
+    shWrite('出错：' + (err.message || err), 'sh-bad');
+  }
+}
+
+function shPrev() {
+  if (!shHistory.value.length) return;
+  shCursor = Math.max(0, shCursor - 1);
+  shLine.value = shHistory.value[shCursor] || '';
+}
+
+function shNext() {
+  if (!shHistory.value.length) return;
+  shCursor = Math.min(shHistory.value.length, shCursor + 1);
+  shLine.value = shHistory.value[shCursor] || '';
+}
+
+/* ---------------------------- 设置页（同一份清单，同一个表单） ---------------------------- */
+
+const settingsPack = ref(null);
+const settingsForm = ref({});
+const settingsOrig = ref({});
+const settingsBusy = ref(false);
+
+function fieldBlank(field) {
+  if (!field) return '';
+  if (field.type === 'list') return (field.value || []).join('\n');
+  return field.value == null ? '' : field.value;
+}
+
 async function loadSettings() {
   if (!selectedId.value) return;
+  settingsBusy.value = true;
   try {
-    const data = await api.getSettings(selectedId.value);
-    settings.value = data.settings;
-  } catch (_) {
-    /* 静默 */
+    const ack = await auth.sendCommand(selectedId.value, 'settings_get', {});
+    const pack = parseOut(ack);
+    if (!pack || !pack.clientUid) {
+      // 老客户端没有这条命令：说清楚，别让人对着空表单发呆
+      toast.warning((ack && ack.output) || '拉不到设置（客户端要 3.0.0.37 以上）');
+      return;
+    }
+    settingsPack.value = pack;
+    const form = {};
+    const orig = {};
+    for (const f of pack.fields || []) {
+      form[f.key] = fieldBlank(f);
+      orig[f.key] = fieldBlank(f);
+    }
+    settingsForm.value = form;
+    settingsOrig.value = orig;
+  } catch (err) {
+    toast.warning('拉不到设置：' + (err.message || err));
+  } finally {
+    settingsBusy.value = false;
   }
+}
+
+/** 只提交改动过的项 —— 没碰的绝不覆盖 */
+function collectSettings() {
+  const fields = (settingsPack.value && settingsPack.value.fields) || [];
+  const out = {};
+  const norm = (x) => (Array.isArray(x) ? x : String(x == null ? '' : x).split('\n'))
+    .map((s) => String(s).trim()).filter(Boolean);
+  for (const f of fields) {
+    const key = f.key;
+    const now = settingsForm.value[key];
+    const was = settingsOrig.value[key];
+    if (f.type === 'bool') {
+      if (Boolean(now) !== Boolean(was)) out[key] = Boolean(now);
+    } else if (f.type === 'number') {
+      if (String(now) !== String(was)) out[key] = Number(now);
+    } else if (f.type === 'secret') {
+      if (String(now || '')) out[key] = String(now);
+    } else if (f.type === 'list') {
+      if (JSON.stringify(norm(now)) !== JSON.stringify(norm(was))) out[key] = norm(now);
+    } else if (String(now) !== String(was)) {
+      out[key] = String(now);
+    }
+  }
+  return out;
 }
 
 async function saveSettings() {
+  if (!selectedId.value) return;
+  const values = collectSettings();
+  if (!Object.keys(values).length) {
+    toast.info('没有改动');
+    return;
+  }
+  settingsBusy.value = true;
   try {
-    await api.saveSettings(selectedId.value, settings.value);
-    toast.success('两边都改了。');
+    const ack = await auth.sendCommand(selectedId.value, 'settings_set', { values });
+    const res = parseOut(ack) || {};
+    (res.applied || []).forEach((x) => toast.success('已设置：' + x));
+    (res.problems || []).forEach((x) => toast.warning('没改成：' + x));
+    if ((res.needRestart || []).length) {
+      toast.info('这些要重启客户端才生效：' + res.needRestart.join('、'));
+    }
+    if (!(res.applied || []).length && !(res.problems || []).length) toast.info('没有改动');
+    await loadSettings();
   } catch (err) {
-    toast.error(err.message);
+    toast.error('没改成：' + (err.message || err));
+  } finally {
+    settingsBusy.value = false;
   }
 }
 
-/* -------------------------------- 命令面板 -------------------------------- */
+/** 命令面板：重启/关机要多次确认的那些 */
 
 /** 重启两次确认、关机三次确认 */
 async function confirmPower(kind) {
@@ -2137,17 +2293,54 @@ function fmtTime(t) {
 
         <!-- 命令 -->
         <div v-show="tab === 'command'" class="pane">
-          <div class="cmd-grid">
-            <button
-              v-for="c in commands"
-              :key="c.key"
-              :class="['cmd', { danger: c.danger }]"
-              :disabled="!selectedOnline"
-              @click="runCommand(c)"
-            >
-              <iconify-icon :icon="c.icon"></iconify-icon>
-              <span>{{ c.label }}</span>
-            </button>
+          <div class="card">
+            <h3>发一条命令</h3>
+            <p class="muted tiny">和一体机自己那个页面一个用法：写命令名，它会原样执行、把回显带回来。</p>
+            <div class="pane-bar" style="margin-top:10px">
+              <input
+                v-model="cmdName"
+                class="text-input"
+                style="flex:1"
+                placeholder="输入命令，比如 status / screenshot / lock，回车执行"
+                @keydown.enter="runNamedCommand()"
+              />
+              <button class="btn small primary" :disabled="!selectedOnline || cmdBusy" @click="runNamedCommand()">
+                <iconify-icon icon="ph:play"></iconify-icon>执行
+              </button>
+            </div>
+            <div class="row" style="margin:10px 0">
+              <button
+                v-for="p in COMMAND_PRESETS"
+                :key="p"
+                class="btn small"
+                :disabled="!selectedOnline"
+                @click="runNamedCommand(p)"
+              >{{ p }}</button>
+            </div>
+            <pre class="out">{{ cmdOutput || '还没执行过命令。' }}</pre>
+          </div>
+
+          <div class="card">
+            <h4 class="set-h">Windows 命令行（cmd）</h4>
+            <div class="pane-bar">
+              <span class="mono" style="color:#7fae7a">C:\&gt;</span>
+              <input
+                v-model="shLine"
+                class="text-input"
+                style="flex:1"
+                placeholder="比如 ipconfig / tasklist / dir C:\ （回车执行，↑↓ 翻历史）"
+                @keydown.enter.prevent="runShellLine()"
+                @keydown.up.prevent="shPrev()"
+                @keydown.down.prevent="shNext()"
+              />
+              <button class="btn small primary" :disabled="!selectedOnline" @click="runShellLine()">执行</button>
+              <button class="btn small" @click="shRows = []">清屏</button>
+            </div>
+            <p class="muted tiny" style="margin-top:6px">
+              以这台机器的当前用户身份运行，输出原样返回（可能含敏感信息）。每条都会记进客户端日志。
+            </p>
+            <pre class="out sh-out"><span v-for="(l, i) in shRows" :key="i" :class="l.cls">{{ l.text }}
+</span><span v-if="!shRows.length">在这里敲 cmd 命令，回车执行。</span></pre>
           </div>
 
           <div class="card">
@@ -2156,7 +2349,7 @@ function fmtTime(t) {
               <li v-for="(l, i) in commandLog" :key="i">
                 <span :class="['pill', l.ok ? 'on' : 'bad']">{{ l.ok ? '好' : '挂' }}</span>
                 <span class="mono">{{ l.command }}</span>
-                <span class="muted">{{ l.output || '' }}</span>
+                <span class="muted">{{ String(l.output || '').slice(0, 60) }}</span>
                 <span class="mono muted right">{{ fmtTime(l.at) }}</span>
               </li>
               <li v-if="!commandLog.length" class="muted">还没发过命令。</li>
@@ -2262,20 +2455,83 @@ function fmtTime(t) {
         <!-- 设置 -->
         <div v-show="tab === 'settings'" class="pane">
           <div class="card">
-            <h3>记录保留策略</h3>
-            <p class="muted">改完立刻同步到那台机器，它会自己删旧的。</p>
-            <div class="two">
-              <div class="field">
-                <label>最多留多少条</label>
-                <input v-model.number="settings.maxLogCount" type="number" min="100" step="100" />
+            <h3>这台机器的设置</h3>
+            <p class="muted tiny">和一体机自己那个页面看到的是同一份，改一处两边都对。</p>
+            <div v-if="settingsPack" class="kv" style="margin-top:12px">
+              <div><span>机器名</span><span>{{ settingsPack.name || '—' }}</span></div>
+              <div><span>机器号</span><span class="mono">{{ settingsPack.clientUid }}</span></div>
+              <div><span>版本</span><span class="mono">v{{ settingsPack.version }}</span></div>
+              <div><span>内网地址</span><span class="mono">{{ (settingsPack.localIps || []).join('、') || '—' }}</span></div>
+              <div><span>局域网端口</span><span class="mono">{{ settingsPack.lanPort }} / {{ settingsPack.lanWebPort }}</span></div>
+              <div><span>服务器</span><span class="mono">{{ (settingsPack.servers || []).join('、') || '—' }}</span></div>
+              <div><span>监控文件夹</span><span>{{ (settingsPack.watchDirs || []).length }} 个</span></div>
+              <div><span>屏幕帧率</span><span class="mono">{{ settingsPack.screenFps }}</span></div>
+              <div><span>画面质量</span><span class="mono">{{ settingsPack.screenQuality }}</span></div>
+              <div>
+                <span>自动更新</span>
+                <span>{{ settingsPack.autoUpdate ? '开' : '关' }}</span>
               </div>
-              <div class="field">
-                <label>最多占多少字节</label>
-                <input v-model.number="settings.maxLogSize" type="number" min="1048576" step="1048576" />
-                <p class="muted tiny">当前约 {{ fmtSize(settings.maxLogSize) }}</p>
+              <div>
+                <span>管理员权限</span>
+                <span>{{ settingsPack.isAdmin ? '有（能改防火墙、关机）' : '没有 —— 用工具条的「提权重启」' }}</span>
               </div>
             </div>
-            <button class="btn primary" @click="saveSettings"><iconify-icon icon="ph:floppy-disk"></iconify-icon>保存并同步</button>
+            <p v-else class="muted">还没读到设置。<button class="btn small" :disabled="settingsBusy" @click="loadSettings">读一下</button></p>
+          </div>
+
+          <div class="card">
+            <h3>一键修改客户端设置</h3>
+            <p class="muted tiny">只提交改动过的项，没碰的不会被覆盖。要重启才生效的会标出来。</p>
+            <div v-if="settingsPack" class="set-form">
+              <div
+                v-for="f in settingsPack.fields"
+                :key="f.key"
+                :class="['set-row', { wide: f.type === 'list' }]"
+              >
+                <label>
+                  {{ f.label }}
+                  <span v-if="f.restart" class="tip">（要重启）</span>
+                </label>
+                <label v-if="f.type === 'bool'" class="set-bool">
+                  <input type="checkbox" v-model="settingsForm[f.key]" :data-set="f.key" />
+                  <span>开</span>
+                </label>
+                <textarea
+                  v-else-if="f.type === 'list'"
+                  v-model="settingsForm[f.key]"
+                  :data-set="f.key"
+                  rows="3"
+                  placeholder="一行一个"
+                ></textarea>
+                <div v-else-if="f.type === 'number'">
+                  <input
+                    type="number"
+                    v-model.number="settingsForm[f.key]"
+                    :data-set="f.key"
+                    :min="f.min"
+                    :max="f.max"
+                    style="width:140px"
+                  />
+                  <span class="tip">范围 {{ f.min }} ~ {{ f.max }}</span>
+                </div>
+                <input
+                  v-else-if="f.type === 'secret'"
+                  type="password"
+                  v-model="settingsForm[f.key]"
+                  :data-set="f.key"
+                  placeholder="留空不改"
+                  autocomplete="new-password"
+                />
+                <input v-else type="text" v-model="settingsForm[f.key]" :data-set="f.key" />
+              </div>
+              <div class="row" style="margin-top:14px">
+                <button class="btn primary" :disabled="settingsBusy || !selectedOnline" @click="saveSettings">
+                  <iconify-icon icon="ph:floppy-disk"></iconify-icon>保存
+                </button>
+                <button class="btn small" :disabled="settingsBusy" @click="loadSettings">重新读一遍</button>
+              </div>
+            </div>
+            <p v-else class="muted">点上面「读一下」把清单拉过来。</p>
           </div>
 
           <div class="card">
@@ -2874,6 +3130,48 @@ th { color: var(--sage); font-weight: 500; font-size: 12.4px; }
   .client-list { grid-auto-flow: column; overflow-x: auto; }
   .two { grid-template-columns: 1fr; }
 }
+
+/* ------------------- 命令页 / 设置页（跟局域网那页一个样子） ------------------- */
+.out {
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(8, 12, 9, 0.72);
+  color: #d7e6da;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, "Microsoft YaHei", monospace;
+  font-size: 12.6px;
+  line-height: 1.62;
+  white-space: pre-wrap;
+  word-break: break-all;
+  min-height: 110px;
+  max-height: 320px;
+  overflow: auto;
+}
+.sh-out { max-height: 300px; }
+.sh-out .sh-cmd { color: #9ecbac; }
+.sh-out .sh-bad { color: #e69a90; }
+.set-h { margin: 4px 0 10px; font-size: 14.5px; color: var(--sage); font-weight: 600; }
+.set-form { display: grid; gap: 10px; margin-top: 12px; }
+.set-row { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
+.set-row.wide { align-items: flex-start; flex-direction: column; }
+.set-row > label:first-child { font-size: 13px; color: var(--text-dim); min-width: 160px; }
+.set-row.wide > label:first-child { min-width: 0; }
+.set-row input[type='text'],
+.set-row input[type='password'],
+.set-row input[type='number'],
+.set-row textarea {
+  border: 1px solid var(--line);
+  background: rgba(12, 17, 12, 0.5);
+  color: var(--text);
+  border-radius: 9px;
+  padding: 8px 11px;
+  font-size: 13px;
+  min-width: 200px;
+}
+.set-row.wide textarea { width: 100%; min-height: 74px; resize: vertical; }
+.set-bool { display: inline-flex; align-items: center; gap: 6px; color: var(--text); }
+.tip { font-size: 11.5px; color: var(--sage); }
 
 /* ==========================================================================
    新界面（skin-new）

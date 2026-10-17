@@ -12,7 +12,8 @@ import { defineStore } from 'pinia';
  */
 export const useUiStore = defineStore('ui', {
   state: () => ({
-    newLook: false,
+    // 选了哪套界面记在本地：刷新、关掉重开都还是那一套
+    newLook: localStorage.getItem('mythclass.dash.look') === 'new',
     // 现在选的是哪台机器：换个界面也得知道看的是谁
     clientId: Number(localStorage.getItem('mythclass.teacher.clientId') || 0) || 0,
   }),
@@ -20,10 +21,15 @@ export const useUiStore = defineStore('ui', {
   actions: {
     setLook(on) {
       this.newLook = !!on;
+      try {
+        localStorage.setItem('mythclass.dash.look', this.newLook ? 'new' : 'old');
+      } catch (_) {
+        /* 存不了就算了，只是下次要重新点一下 */
+      }
     },
 
     toggleLook() {
-      this.newLook = !this.newLook;
+      this.setLook(!this.newLook);
     },
 
     /** 控制台里选了哪台机器 */
