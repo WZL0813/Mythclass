@@ -971,6 +971,9 @@ const notice = ref({
   ],
 });
 
+/** 发送中：那台机器还没回话，按钮就转圈、变灰、点不动 */
+const noticeSending = ref(false);
+
 /**
  * 勾选互斥：
  * 勾「纯弹出」→ 三个回复选项全部取消；
@@ -1227,6 +1230,7 @@ function testVoice() {
 
 async function sendNotice() {
   const n = notice.value;
+  if (noticeSending.value) return;
   if (!n.body.trim() && !n.title.trim()) return toast.warning('标题和内容至少写一个');
   const options = n.opts
     .map((o, i) =>
@@ -1235,31 +1239,42 @@ async function sendNotice() {
         : null
     )
     .filter(Boolean);
-  const ack = await auth.sendCommand(selectedId.value, 'message', {
-    title: n.title.trim() || '老师有话要说',
-    body: n.body.trim() || n.title.trim(),
-    topmost: n.topmost,
-    fullscreen: n.fullscreen,
-    autoFit: n.autoFit,
-    autoClose: n.autoCloseOn ? Number(n.autoClose) || 0 : 0,
-    sound: n.soundMode === 'upload' ? n.soundData : '',
-    voice: !!n.speak,
-    voiceVolume: Number(n.voiceVolume) || 0,
-    voiceRate: Number(n.voiceRate) || 0,
-    voiceName: n.voiceName || '',
-    voiceParts: n.voiceParts || [],
-    voiceOrder: n.voiceOrder || [],
-    size: { w: Number(n.w) || 520, h: Number(n.h) || 300 },
-    fontSize: {
-      title: Number(n.fontTitle) || 16,
-      body: Number(n.fontBody) || 12,
-      button: Number(n.fontButton) || 10,
-    },
-    options,
-  });
-  notice.value.open = false;
-  if (ack && ack.ok) toast.success('通知发出去了，等他回答');
-  else toast.warning('没发成功，机器可能离线');
+  // 按钮转圈、变灰、点不动 —— 一直到那台机器真的回了话才算发出去
+  noticeSending.value = true;
+  try {
+    const ack = await auth.sendCommand(selectedId.value, 'message', {
+      title: n.title.trim() || '老师有话要说',
+      body: n.body.trim() || n.title.trim(),
+      topmost: n.topmost,
+      fullscreen: n.fullscreen,
+      autoFit: n.autoFit,
+      autoClose: n.autoCloseOn ? Number(n.autoClose) || 0 : 0,
+      sound: n.soundMode === 'upload' ? n.soundData : '',
+      voice: !!n.speak,
+      voiceVolume: Number(n.voiceVolume) || 0,
+      voiceRate: Number(n.voiceRate) || 0,
+      voiceName: n.voiceName || '',
+      voiceParts: n.voiceParts || [],
+      voiceOrder: n.voiceOrder || [],
+      size: { w: Number(n.w) || 520, h: Number(n.h) || 300 },
+      fontSize: {
+        title: Number(n.fontTitle) || 16,
+        body: Number(n.fontBody) || 12,
+        button: Number(n.fontButton) || 10,
+      },
+      options,
+    });
+    if (ack && ack.ok) {
+      notice.value.open = false;
+      toast.success('已经弹到那台机器上了');
+    } else {
+      toast.warning((ack && ack.output) || '没送到，那台机器可能没在线');
+    }
+  } catch (err) {
+    toast.warning('没送到：' + (err.message || err));
+  } finally {
+    noticeSending.value = false;
+  }
 }
 
 
@@ -1422,7 +1437,8 @@ async function startScreen(force = false) {
     // 兜一次：万一是直接点「开始看」进来的，也能收到那个建议
     setTimeout(() => suggestDirect(selected.value), 800);
   } else {
-    toast.warning('没连上，可能机器离线。');
+    // 一进来就弹这句太吵（机器还没上线也会弹），安安静静地记一笔就好
+    console.debug('[screen] 自动开画面没成，可能不是在线');
   }
 }
 
@@ -2083,8 +2099,11 @@ function fmtTime(t) {
         </div>
 
         <div class="nt-actions">
-          <button class="btn gh" @click="notice.open = false">取消</button>
-          <button class="btn pm" @click="sendNotice">发出去</button>
+          <button class="btn gh" :disabled="noticeSending" @click="notice.open = false">取消</button>
+          <button class="btn pm" :class="{ sending: noticeSending }" :disabled="noticeSending" @click="sendNotice">
+            <iconify-icon v-if="noticeSending" icon="ph:circle-notch" class="spin"></iconify-icon>
+            {{ noticeSending ? '发送中…' : '发出去' }}
+          </button>
         </div>
       </div>
     </div>
@@ -2800,6 +2819,11 @@ function fmtTime(t) {
 .nt-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 .btn.gh { background: transparent; border: 1px solid var(--line); color: var(--sage); }
 .btn.pm { background: #3f6b52; border: 1px solid #4c7d61; color: #f1f6ef; }
+.btn.pm:disabled,
+.btn.gh:disabled { opacity: 0.55; cursor: progress; }
+.btn.pm.sending { display: inline-flex; align-items: center; gap: 7px; }
+.spin { animation: nt-spin 900ms linear infinite; }
+@keyframes nt-spin { to { transform: rotate(360deg); } }
 
 /* 直连成功后出现的管理栏：告诉老师「还能进它自己的控制台」 */
 .direct-dock {
