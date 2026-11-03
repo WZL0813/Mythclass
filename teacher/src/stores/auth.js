@@ -1,5 +1,30 @@
 import { defineStore } from 'pinia';
-import { api, tokenStore, connectSocket, disconnectSocket } from '@/api';
+import { api, tokenStore, connectSocket, disconnectSocket, failoverIfDead } from '@/api';
+
+/**
+ * 断了以后别急着喊救命：等 10 秒，还连不上就测一遍线路，
+ * 现在这条真死了就换到最快的那条（换完刷新一下页面）。
+ */
+let failoverTimer = 0;
+function scheduleFailover(delay = 10000) {
+  if (failoverTimer) return;
+  failoverTimer = setTimeout(async () => {
+    failoverTimer = 0;
+    try {
+      const switched = await failoverIfDead();
+      if (switched) {
+        try {
+          sessionStorage.setItem('mythclass.teacher.switchedTo', switched);
+        } catch (_) {
+          /* 无所谓 */
+        }
+        window.location.reload();
+      }
+    } catch (_) {
+      /* 换不了就算了，页面本来就在报错 */
+    }
+  }, delay);
+}
 
 /**
  * 发出去的命令在等回执：requestId -> resolve
@@ -127,14 +152,20 @@ export const useAuthStore = defineStore('auth', {
 
       socket.on('connect', () => {
         this.socketReady = true;
+        if (failoverTimer) {
+          clearTimeout(failoverTimer);
+          failoverTimer = 0;
+        }
         // 重连后房间成员资格没了，得自己补回来
         for (const clientId of this.watching) socket.emit('watch', { clientId });
       });
       socket.on('disconnect', () => {
         this.socketReady = false;
+        scheduleFailover();
       });
       socket.on('connect_error', () => {
         this.socketReady = false;
+        scheduleFailover();
       });
 
       socket.on('client:presence', (payload) => {

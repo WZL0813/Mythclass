@@ -5,14 +5,17 @@ import { ElMessageBox } from 'element-plus';
 import { toast } from '@/utils/toast';
 import { useAuthStore } from '@/stores/auth';
 import { useUiStore } from '@/stores/ui';
-import { HTTP_BASE } from '@/api';
-import { api, OFFICIAL_SERVER, SERVER_URL } from '@/api';
+import { OFFICIAL_ENDPOINTS, currentBase, currentHost } from '@/api';
+import { api } from '@/api';
 import { version as appVersion } from '../../package.json';
 import StarBackdrop from '@/components/StarBackdrop.vue';
 
 const router = useRouter();
 const route = useRoute();
 const auth = useAuthStore();
+// 现在用的是哪条线路（主站 / 英国 / 意大利 / Cloudflare）
+const currentEndpointHost = ref(currentHost());
+const currentEndpointBase = ref(currentBase());
 const ui = useUiStore();
 
 /* --------------------------------- 状态 --------------------------------- */
@@ -865,7 +868,7 @@ const release = ref({
 const releaseList = ref([]);
 
 async function adminToken() {
-  const res = await fetch(`${HTTP_BASE}/api/admin/login`, {
+  const res = await fetch(`${currentBase()}/api/admin/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -880,7 +883,7 @@ async function adminToken() {
 
 async function loadReleases() {
   try {
-    const res = await fetch(`${HTTP_BASE}/api/admin/releases`, {
+    const res = await fetch(`${currentBase()}/api/admin/releases`, {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${await adminToken()}`,
@@ -901,7 +904,7 @@ async function publishRelease() {
   r.busy = true;
   try {
     const token = await adminToken();
-    const res = await fetch(`${HTTP_BASE}/api/admin/releases`, {
+    const res = await fetch(`${currentBase()}/api/admin/releases`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({
@@ -2313,7 +2316,9 @@ function fmtTime(t) {
             <button class="btn small" @click="rename"><iconify-icon icon="ph:pencil-simple"></iconify-icon>改名</button>
             <button class="btn small danger" @click="unbind"><iconify-icon icon="ph:link-break"></iconify-icon>解绑</button>
             <button class="btn small ghost" @click="logout"><iconify-icon icon="ph:sign-out"></iconify-icon>退出</button>
-            <span class="app-ver">教师端 v{{ appVersion }}</span>
+            <span class="app-ver" :title="'当前线路：' + currentEndpointHost">
+    教师端 v{{ appVersion }} · {{ currentEndpointHost }}
+  </span>
           </div>
         </header>
 
@@ -2760,8 +2765,8 @@ function fmtTime(t) {
           <div class="card">
             <h3>服务器</h3>
             <div class="kv">
-              <div><span>官方服务器</span><span class="mono">{{ OFFICIAL_SERVER }}</span></div>
-              <div><span>当前教师端地址</span><span class="mono">{{ SERVER_URL || '同源（开发模式）' }}</span></div>
+              <div><span>官方线路</span><span class="mono">{{ OFFICIAL_ENDPOINTS.join('、') }}</span></div>
+              <div><span>现在走的这条</span><span class="mono">{{ currentEndpointBase || '同源（开发模式）' }}</span></div>
               <div><span>内置状态</span><span>官方服务器不可删除</span></div>
             </div>
             <p class="muted tiny">自定义服务器在客户端设置里加，教师端跟着客户端走。</p>

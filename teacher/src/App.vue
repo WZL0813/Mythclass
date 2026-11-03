@@ -1,9 +1,10 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import NavBar from '@/components/NavBar.vue';
 import FooterBar from '@/components/FooterBar.vue';
 import StarReveal from '@/components/StarReveal.vue';
+import { failoverIfDead } from '@/api';
 import {
   closeStarReveal,
   pageVeiled,
@@ -26,11 +27,38 @@ function applyTheme(value) {
   localStorage.setItem('mythclass.theme', value);
 }
 
+/**
+ * 线路守夜：不管停在哪个页面，每 30 秒看一眼现在这条还活着没有。
+ * 死了就换到最快的那条（换完刷新，页面状态干净）。
+ * 控制台那边断线也会触发一次，这里是兜底 —— 比如正好停在账号设置页。
+ */
+let lineTimer = 0;
+
 onMounted(async () => {
   applyTheme(theme.value);
   // 带着 token 刷新任何页面时，把用户信息补回来；
   // 不然导航栏只知道「有 token」，头像那里就是空的
   await auth.restore();
+
+  lineTimer = setInterval(async () => {
+    try {
+      const switched = await failoverIfDead({ timeout: 2500, minGapMs: 30000 });
+      if (switched) {
+        try {
+          sessionStorage.setItem('mythclass.teacher.switchedTo', switched);
+        } catch (_) {
+          /* 无所谓 */
+        }
+        window.location.reload();
+      }
+    } catch (_) {
+      /* 测不到就算了，别影响正常用 */
+    }
+  }, 30000);
+});
+
+onBeforeUnmount(() => {
+  if (lineTimer) clearInterval(lineTimer);
 });
 </script>
 
