@@ -237,6 +237,12 @@ onMounted(async () => {
       if (payload && payload.thumb) {
         thumbs.value[payload.clientId] = payload.data;
         thumbAt.value[payload.clientId] = Date.now();
+        // 独立页面在等它那边现在的样子：这张小图正好
+        if (noticeOnly.value && noticeWaiting.value && payload.clientId === selectedId.value && payload.data) {
+          auth.noticeShot = payload.data;
+          noticeWaiting.value = false;
+          noticeResult.value = '这是刚交回来的画面。';
+        }
         return;
       }
       applyFrame(payload, false);
@@ -998,6 +1004,9 @@ const noticeMenu = ref(false);
 /** 客户端弹出来以后交回来的截图 + 一句结果说明（独立页面用） */
 const noticeShot = computed(() => auth.noticeShot || '');
 const noticeResult = ref('');
+/** 刚发完、正等它把画面交回来 */
+const noticeWaiting = ref(false);
+let noticeWaitTimer = 0;
 
 /** 独立页面里换一台机器 */
 function pickTarget(value) {
@@ -1009,6 +1018,44 @@ function pickTarget(value) {
 /** 回控制台（独立页面那个按钮） */
 function goDashboard() {
   router.push({ path: '/dashboard' });
+}
+
+/**
+ * 等客户端交回画面。
+ * socket 中转一旦断（或者服务端版本老），那条 notice_shot 就回不来，
+ * 所以 3 秒还没动静就主动要一张缩略图当替补 —— 总比一直在那儿等强。
+ */
+function waitForNoticeShot() {
+  noticeWaiting.value = true;
+  clearTimeout(noticeWaitTimer);
+  noticeWaitTimer = setTimeout(async () => {
+    if (auth.noticeShot) return;
+    try {
+      await auth.sendCommand(selectedId.value, 'request_frame', { width: 640, quality: 45 });
+    } catch (_) {
+      /* 要不到就算了，下面还会说一句 */
+    }
+    setTimeout(() => {
+      if (!auth.noticeShot && noticeWaiting.value) {
+        noticeResult.value = '它没交出画面（可能线路太慢）。点「再要一张」试试。';
+      }
+    }, 4000);
+  }, 3000);
+}
+
+async function askShotAgain() {
+  if (!selectedId.value) return;
+  noticeResult.value = '正在等它交画面…';
+  noticeWaiting.value = true;
+  try {
+    await auth.sendCommand(selectedId.value, 'request_frame', { width: 720, quality: 50 });
+  } catch (_) {
+    /* 无所谓 */
+  }
+  clearTimeout(noticeWaitTimer);
+  noticeWaitTimer = setTimeout(() => {
+    if (!auth.noticeShot) noticeResult.value = '还是没交回来，看看那台机器还在不在线。';
+  }, 5000);
 }
 
 /** 「独立页面发消息」：同一个标签页跳到 /tanxiaoxi */
@@ -1313,6 +1360,7 @@ async function sendNotice() {
       if (!noticeOnly.value) notice.value.open = false;
       noticeResult.value = '已经弹到那台机器上了，等它把画面交回来…';
       toast.success('已经弹到那台机器上了');
+      if (noticeOnly.value) waitForNoticeShot();
     } else {
       noticeResult.value = (ack && ack.output) || '没送到，那台机器可能没在线';
       toast.warning((ack && ack.output) || '没送到，那台机器可能没在线');
@@ -1748,15 +1796,23 @@ function fieldBlank(field) {
   return field.value == null ? '' : field.value;
 }
 
-async function loadSettings() {
+async function loadSettings(retry = true) {
   if (!selectedId.value) return;
   settingsBusy.value = true;
   try {
     const ack = await auth.sendCommand(selectedId.value, 'settings_get', {});
     const pack = parseOut(ack);
     if (!pack || !pack.clientUid) {
-      // 老客户端没有这条命令：说清楚，别让人对着空表单发呆
-      toast.warning((ack && ack.output) || '拉不到设置（客户端要 3.0.0.37 以上）');
+      // 回执没绕回来（网络/线路抖一下）是常事：先悄悄再问一次，
+      // 别动不动就弹一句"拉不到设置"吓人。
+      if (retry && (!ack || !ack.output)) {
+        await new Promise((r) => setTimeout(r, 900));
+        return loadSettings(false);
+      }
+      if (ack && ack.output) {
+        // 客户端真回了话，但内容不对 —— 那才值得说清楚
+        toast.warning(ack.output);
+      }
       return;
     }
     settingsPack.value = pack;
@@ -2186,6 +2242,9 @@ function fmtTime(t) {
             <p class="muted tiny">{{ noticeResult || '已经弹出来了，这是它交回来的画面。' }}</p>
             <img :src="noticeShot" alt="客户端弹出后的画面" class="nt-shot-img" />
           </template>
+          <button v-if="noticeOnly" class="btn small" style="margin-top: 8px" @click="askShotAgain">
+            <iconify-icon icon="ph:camera"></iconify-icon>再要一张
+          </button>
         </div>
       </div>
     </div>

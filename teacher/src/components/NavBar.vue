@@ -47,12 +47,27 @@ async function probeLines() {
   }
 }
 
+const lineBtn = ref(null);
+const lineMenuPos = ref({ top: 64, right: 16 });
+const lineMenuStyle = computed(() => ({
+  top: `${lineMenuPos.value.top}px`,
+  right: `${lineMenuPos.value.right}px`,
+}));
+
 function toggleLines() {
   lineOpen.value = !lineOpen.value;
-  if (lineOpen.value) {
-    menuOpen.value = false;
-    probeLines();
+  if (!lineOpen.value) return;
+  menuOpen.value = false;
+  // 贴在按钮下面、右对齐
+  const el = lineBtn.value;
+  if (el) {
+    const r = el.getBoundingClientRect();
+    lineMenuPos.value = {
+      top: Math.round(r.bottom + 8),
+      right: Math.max(12, Math.round(window.innerWidth - r.right)),
+    };
   }
+  probeLines();
 }
 
 function useLine(row) {
@@ -208,13 +223,16 @@ function logout() {
           <!-- 线路：在账号设置右边。点开能看每条延迟，也能手动切 -->
           <div class="line-wrap">
             <button
+              ref="lineBtn"
               class="icon-btn"
               :title="'网络线路：' + hostOf(currentBase())"
               @click="toggleLines"
             >
               <iconify-icon icon="ph:wifi-high"></iconify-icon>
             </button>
-            <div v-if="lineOpen" class="line-menu">
+            <Teleport to="body">
+              <div v-if="lineOpen" class="line-backdrop" @click="lineOpen = false"></div>
+              <div v-if="lineOpen" class="line-menu" :style="lineMenuStyle">
               <p class="line-title">网络线路</p>
               <p class="line-sub">
                 {{ lineProbing ? '正在测…' : '延迟最短的会先用；也可以手动切' }}
@@ -232,10 +250,11 @@ function logout() {
                   >切</button>
                 </li>
               </ul>
-              <button class="line-re" :disabled="lineProbing" @click="probeLines">
-                {{ lineProbing ? '测着呢…' : '重新测延迟' }}
-              </button>
-            </div>
+                <button class="line-re" :disabled="lineProbing" @click="probeLines">
+                  {{ lineProbing ? '测着呢…' : '重新测延迟' }}
+                </button>
+              </div>
+            </Teleport>
           </div>
 
           <div class="avatar-wrap">
@@ -256,11 +275,11 @@ function logout() {
 <style scoped>
   /* 线路那个小面板：贴在按钮下面，窄一点，别挡住控制台 */
   .line-wrap { position: relative; }
+  /* 透明背板：点空白处关掉面板（面板本身在 body 上，不怕被页面压住） */
+  .line-backdrop { position: fixed; inset: 0; z-index: 8999; background: transparent; }
   .line-menu {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 8px);
-    z-index: 70;
+    position: fixed;
+    z-index: 9000;
     width: 302px;
     padding: 12px;
     border: 1px solid rgba(143, 168, 142, 0.28);

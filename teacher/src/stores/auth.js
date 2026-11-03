@@ -64,7 +64,7 @@ function resultKey(payload) {
  */
 function looksTruncated(payload) {
   const out = String(payload.output || '');
-  if (out.length < 1500) return false; // 这么短的输出不可能被截
+  if (out.length < 18000) return false; // 客户端那条是 20000 字截的，这么短不可能被截
   if (!/^[[{]/.test(out)) return false; // 不是 JSON 就别瞎猜
   try {
     JSON.parse(out);
@@ -241,8 +241,9 @@ export const useAuthStore = defineStore('auth', {
       if (!this.socket || !this.socket.connected) {
         return Promise.resolve({ ok: false, error: 'OFFLINE' });
       }
-      // 要收这台机器的回执，就得先订阅它（服务端只把 command_result 发给订阅了的老师）
-      if (!this.watching.includes(clientId)) this.watchClient(clientId);
+      // 要收这台机器的回执，就得先订阅它（服务端只把 command_result 发给订阅了的老师）。
+      // 每次发命令都补一次 watch：房间成员资格会因为重连/切页面丢，补一下很便宜
+      this.watchClient(clientId);
       cmdSeq += 1;
       const requestId = `t${Date.now().toString(36)}-${cmdSeq}`;
       return new Promise((resolve) => {
