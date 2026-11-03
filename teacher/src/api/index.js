@@ -42,6 +42,7 @@ export function toHttpUrl(url) {
 
 const BAKED_BASE = toHttpUrl(RAW_SERVER);
 const BASE_KEY = 'mythclass.teacher.endpoint';
+const MANUAL_KEY = 'mythclass.teacher.endpointManual';
 
 /**
  * 现在用的是哪条线路。
@@ -73,13 +74,24 @@ export function currentHost() {
   }
 }
 
-export function setEndpoint(base) {
+export function setEndpoint(base, { manual = false } = {}) {
   activeBase = String(base || '').trim().replace(/\/+$/, '');
   try {
     if (activeBase) localStorage.setItem(BASE_KEY, activeBase);
     else localStorage.removeItem(BASE_KEY);
+    // 手动挑的那条要钉住：只要它还活着就别被自动选最快顶掉
+    if (manual) localStorage.setItem(MANUAL_KEY, '1');
+    else localStorage.removeItem(MANUAL_KEY);
   } catch (_) {
     /* 存不了就算了 */
+  }
+}
+
+function isManualChoice() {
+  try {
+    return localStorage.getItem(MANUAL_KEY) === '1';
+  } catch (_) {
+    return false;
   }
 }
 
@@ -133,6 +145,11 @@ export async function resolveEndpoint({ timeout = 3000 } = {}) {
   const rows = await measureEndpoints({ timeout });
   const alive = rows.filter((r) => r.ms !== null).sort((a, b) => a.ms - b.ms);
   if (!alive.length) return '';
+
+  // 用户手动挑过、而且那条还活着：听用户的
+  const pinned = rows.find((r) => r.base === activeBase && r.ms !== null);
+  if (pinned && isManualChoice()) return pinned.base;
+
   setEndpoint(alive[0].base);
   return alive[0].base;
 }

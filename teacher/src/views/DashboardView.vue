@@ -290,7 +290,6 @@ onMounted(async () => {
     const wantId = Number(route.query.clientId || 0);
     const hit = wantId ? clients.value.find((c) => c.id === wantId) : null;
     if (hit && hit.id !== selectedId.value) selectClient(hit);
-    notice.value.mode = 'page';
     notice.value.open = true;
   }
 
@@ -958,8 +957,6 @@ const noticeOnly = computed(() => props.only === 'notice');
 
 const notice = ref({
   open: false,
-  // 在哪儿发：本页面的弹框（inline），还是独立页面 /tanxiaoxi（page）
-  mode: 'inline',
   topmost: true,
   fullscreen: false,
   // 窗口大小与字号都能自定义；勾了自适应就按内容算，最多到屏幕的九成
@@ -995,6 +992,9 @@ const notice = ref({
 
 /** 发送中：那台机器还没回话，按钮就转圈、变灰、点不动 */
 const noticeSending = ref(false);
+
+/** 弹消息旁边那个小三角有没有展开 */
+const noticeMenu = ref(false);
 /** 客户端弹出来以后交回来的截图 + 一句结果说明（独立页面用） */
 const noticeShot = computed(() => auth.noticeShot || '');
 const noticeResult = ref('');
@@ -1011,31 +1011,11 @@ function goDashboard() {
   router.push({ path: '/dashboard' });
 }
 
-/** 换「在哪儿发」：选独立页面就直接跳过去（同一个标签页） */
-function setNoticeMode(mode) {
-  notice.value.mode = mode;
-  if (mode === 'page' && !noticeOnly.value) {
-    router.push({ path: '/tanxiaoxi', query: { clientId: String(selectedId.value || '') } });
-  } else if (mode === 'inline' && noticeOnly.value) {
-    router.push({ path: '/dashboard' });
-  }
+/** 「独立页面发消息」：同一个标签页跳到 /tanxiaoxi */
+function openNoticePage() {
+  const id = selectedId.value || 0;
+  router.push({ path: '/tanxiaoxi', query: { clientId: String(id) } });
 }
-
-/**
- * 下拉的默认值容易丢：<select> 先建出来、后插 <option>，
- * 浏览器那时还没得选，就会变成"什么都没选"（空白）。
- * 所以框子一打开，再补一次。
- */
-const modeSelect = ref(null);
-watch(
-  () => notice.value.open,
-  (open) => {
-    if (!open) return;
-    nextTick(() => {
-      if (modeSelect.value) modeSelect.value.value = notice.value.mode;
-    });
-  }
-);
 
 /**
  * 勾选互斥：
@@ -1058,8 +1038,6 @@ function openNotice() {
   loadVoiceOptions();
   notice.value = {
     open: true,
-    // 记住上次选的「在哪儿发」，默认还是在当前页面
-    mode: notice.value.mode || 'inline',
     topmost: true,
     fullscreen: false,
     soundMode: 'default',
@@ -2062,21 +2040,6 @@ function fmtTime(t) {
           <option v-if="!clients.length" value="">（还没有绑定机器）</option>
         </select>
 
-        <!-- 在哪儿发：本页面 / 独立页面 -->
-        <p class="nt-label">在哪儿发</p>
-        <select
-          ref="modeSelect"
-          class="nt-input"
-          :value="notice.mode"
-          @change="setNoticeMode($event.target.value)"
-        >
-          <option value="inline" :selected="notice.mode === 'inline'">本页面发消息</option>
-          <option value="page" :selected="notice.mode === 'page'">独立页面发消息</option>
-        </select>
-        <p class="muted tiny">
-          独立页面只干发消息这一件事，地址是 /tanxiaoxi，在这个标签页打开。
-        </p>
-
         <label class="nt-row">
           <input type="checkbox" v-model="notice.topmost" />
           <span>置顶显示（压在其他窗口上面）</span>
@@ -2238,16 +2201,36 @@ function fmtTime(t) {
 
     <!-- 顶部工具条 -->
     <div class="top-bar">
-      <button
-        v-for="t in quickTools"
-        :key="t.key"
-        class="tool"
-        :disabled="!selected || !selectedOnline"
-        @click="t.run()"
-      >
-        <iconify-icon :icon="t.icon"></iconify-icon>
-        <span>{{ t.label }}</span>
-      </button>
+      <div v-for="t in quickTools" :key="t.key" class="tool-wrap">
+        <button
+          class="tool"
+          :disabled="!selected || !selectedOnline"
+          @click="t.run()"
+        >
+          <iconify-icon :icon="t.icon"></iconify-icon>
+          <span>{{ t.label }}</span>
+        </button>
+        <!-- 弹消息旁边那个小三角：本页面发 / 独立页面发 -->
+        <button
+          v-if="t.key === 'message'"
+          class="tool-caret"
+          :disabled="!selected || !selectedOnline"
+          title="在哪儿发：本页面 / 独立页面"
+          @click.stop="noticeMenu = !noticeMenu"
+        >
+          <iconify-icon icon="ph:caret-down"></iconify-icon>
+        </button>
+        <div v-if="t.key === 'message' && noticeMenu" class="tool-menu">
+          <button type="button" @click="noticeMenu = false; openNotice()">
+            <iconify-icon icon="ph:chat-centered-text"></iconify-icon>
+            本页面发消息
+          </button>
+          <button type="button" @click="noticeMenu = false; openNoticePage()">
+            <iconify-icon icon="ph:arrow-square-out"></iconify-icon>
+            独立页面发消息
+          </button>
+        </div>
+      </div>
       <p class="top-now mono">{{ selected ? selected.name || selected.clientUid : '先选一台机器' }}</p>
     </div>
 
@@ -3124,6 +3107,56 @@ function fmtTime(t) {
 }
 .icon-mini:hover { color: var(--text); border-color: rgba(94, 154, 115, 0.5); }
 .ev-fold { margin-left: auto; }
+
+/* 弹消息旁边那个小三角 + 它的小菜单 */
+.tool-wrap { position: relative; display: inline-flex; align-items: flex-start; }
+.tool-wrap .tool { border-radius: 11px 0 0 11px; }
+.tool-caret {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  align-self: stretch;
+  margin: 2px 0;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid rgba(143, 168, 142, 0.18);
+  border-radius: 0 11px 11px 0;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.tool-caret iconify-icon { font-size: 13px; }
+.tool-caret:hover:not(:disabled), .tool-caret:focus-visible { background: rgba(243, 239, 227, 0.08); color: #dbe8dd; }
+.tool-caret:disabled { opacity: 0.4; cursor: default; }
+.tool-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 60;
+  min-width: 178px;
+  padding: 6px;
+  border: 1px solid rgba(143, 168, 142, 0.28);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(20, 29, 23, 0.98), rgba(11, 17, 13, 0.98));
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.42);
+  display: grid;
+  gap: 2px;
+}
+.tool-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12.6px;
+  text-align: left;
+  cursor: pointer;
+}
+.tool-menu button:hover { background: rgba(63, 107, 82, 0.28); }
 
 /* ------------------------------ 顶部工具条 ------------------------------ */
 .top-bar {

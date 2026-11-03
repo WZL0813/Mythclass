@@ -40,7 +40,7 @@ async function probeLines() {
 async function useLine(row) {
   switching.value = true;
   try {
-    setEndpoint(row.base);
+    setEndpoint(row.base, { manual: true });
     window.location.reload();
   } finally {
     switching.value = false;

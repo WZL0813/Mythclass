@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useUiStore } from '@/stores/ui';
 import { playStarRevealThen } from '@/composables/starReveal';
+import { currentBase, endpointCandidates, measureEndpoints, setEndpoint } from '@/api';
 
 defineProps({ theme: { type: String, default: 'dark' } });
 const emit = defineEmits(['toggle-theme']);
@@ -13,6 +14,52 @@ const router = useRouter();
 const auth = useAuthStore();
 const ui = useUiStore();
 const menuOpen = ref(false);
+
+/* ---------------- 线路：点一下就能看到每条多少毫秒、手动切 ---------------- */
+const lineOpen = ref(false);
+const lines = ref([]);
+const lineProbing = ref(false);
+const lineCurrent = ref(currentBase());
+
+function hostOf(base) {
+  try {
+    return new URL(base).host;
+  } catch (_) {
+    return base;
+  }
+}
+
+function msText(row) {
+  if (lineProbing.value) return '…';
+  return row.ms === null || row.ms === undefined ? '不通' : `${row.ms} ms`;
+}
+
+async function probeLines() {
+  lineProbing.value = true;
+  try {
+    lineCurrent.value = currentBase();
+    // 先把要测的几条列出来，别让面板空着
+    lines.value = endpointCandidates().map((base) => ({ base, ms: null }));
+    lines.value = await measureEndpoints({ timeout: 3000 });
+    lineCurrent.value = currentBase();
+  } finally {
+    lineProbing.value = false;
+  }
+}
+
+function toggleLines() {
+  lineOpen.value = !lineOpen.value;
+  if (lineOpen.value) {
+    menuOpen.value = false;
+    probeLines();
+  }
+}
+
+function useLine(row) {
+  if (!row || row.base === currentBase() || row.ms === null || row.ms === undefined) return;
+  setEndpoint(row.base, { manual: true });
+  window.location.reload();
+}
 
 // 导航栏收起来：省空间用。状态存本地，刷新后保持
 const NAV_KEY = 'mythclass.nav.tucked';
@@ -158,6 +205,39 @@ function logout() {
         </template>
 
         <template v-else>
+          <!-- 线路：在账号设置右边。点开能看每条延迟，也能手动切 -->
+          <div class="line-wrap">
+            <button
+              class="icon-btn"
+              :title="'网络线路：' + hostOf(currentBase())"
+              @click="toggleLines"
+            >
+              <iconify-icon icon="ph:wifi-high"></iconify-icon>
+            </button>
+            <div v-if="lineOpen" class="line-menu">
+              <p class="line-title">网络线路</p>
+              <p class="line-sub">
+                {{ lineProbing ? '正在测…' : '延迟最短的会先用；也可以手动切' }}
+              </p>
+              <ul class="line-list">
+                <li v-for="row in lines" :key="row.base" :class="{ on: row.base === lineCurrent }">
+                  <span class="l-host mono">{{ hostOf(row.base) }}</span>
+                  <span class="l-ms mono">{{ msText(row) }}</span>
+                  <span v-if="row.base === lineCurrent" class="l-tag">在用</span>
+                  <button
+                    v-else
+                    class="l-go"
+                    :disabled="lineProbing || row.ms === null || row.ms === undefined"
+                    @click="useLine(row)"
+                  >切</button>
+                </li>
+              </ul>
+              <button class="line-re" :disabled="lineProbing" @click="probeLines">
+                {{ lineProbing ? '测着呢…' : '重新测延迟' }}
+              </button>
+            </div>
+          </div>
+
           <div class="avatar-wrap">
             <button class="avatar" @click="menuOpen = !menuOpen">{{ auth.displayName.slice(0, 1).toUpperCase() }}</button>
             <div v-if="menuOpen" class="menu">
@@ -174,6 +254,59 @@ function logout() {
 </template>
 
 <style scoped>
+  /* 线路那个小面板：贴在按钮下面，窄一点，别挡住控制台 */
+  .line-wrap { position: relative; }
+  .line-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    z-index: 70;
+    width: 302px;
+    padding: 12px;
+    border: 1px solid rgba(143, 168, 142, 0.28);
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(20, 29, 23, 0.98), rgba(11, 17, 13, 0.98));
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  }
+  .line-title { margin: 0 0 2px; font-size: 13.5px; color: #dbe8dd; }
+  .line-sub { margin: 0 0 10px; font-size: 11.5px; color: var(--sage); }
+  .line-list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; }
+  .line-list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px solid rgba(143, 168, 142, 0.18);
+    border-radius: 9px;
+    font-size: 12px;
+  }
+  .line-list li.on { border-color: rgba(143, 168, 142, 0.5); background: rgba(63, 107, 82, 0.26); }
+  .l-host { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .l-ms { color: #9fd0ac; min-width: 56px; text-align: right; }
+  .l-tag { font-size: 11px; color: #9fd0ac; }
+  .l-go {
+    padding: 2px 8px;
+    border: 1px solid rgba(143, 168, 142, 0.3);
+    border-radius: 7px;
+    background: transparent;
+    color: var(--sage);
+    font-size: 11.5px;
+    cursor: pointer;
+  }
+  .l-go:hover:not(:disabled) { background: rgba(63, 107, 82, 0.3); color: #eaf4ec; }
+  .l-go:disabled { opacity: 0.4; cursor: default; }
+  .line-re {
+    width: 100%;
+    padding: 7px;
+    border: 1px solid rgba(143, 168, 142, 0.3);
+    border-radius: 9px;
+    background: transparent;
+    color: var(--sage);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .line-re:hover:not(:disabled) { background: rgba(63, 107, 82, 0.26); }
+
   /* 局域网界面那个按钮：跟旁边的小控件对齐 */
   .lan-btn {
     display: inline-flex;

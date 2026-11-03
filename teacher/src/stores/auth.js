@@ -132,8 +132,12 @@ export const useAuthStore = defineStore('auth', {
       if (!this.token) return null;
       try {
         return await this.fetchMe();
-      } catch (_) {
-        this.logout();
+      } catch (err) {
+        // 只有"服务端明确不认这个 token"（401/403）才踢下线。
+        // 网络抖动、正在换线路这些情况别把人踹出去 —— 之前一律 logout，
+        // 结果一切线路就变成未登录，导航栏也少了一半按钮。
+        const status = err && err.status;
+        if (status === 401 || status === 403) this.logout();
         return null;
       }
     },
