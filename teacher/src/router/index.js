@@ -20,6 +20,13 @@ const routes = [
     meta: { title: '控制台 · Mythclass', requiresAuth: true },
   },
   {
+    path: '/tanxiaoxi',
+    name: 'tanxiaoxi',
+    component: () => import('@/views/TanxiaoxiView.vue'),
+    // 只干一件事：发消息。所以不套控制台那一堆东西
+    meta: { title: '发消息 · Mythclass', requiresAuth: true },
+  },
+  {
     path: '/localwebui',
     name: 'localwebui',
     component: () => import('@/views/LocalWebView.vue'),

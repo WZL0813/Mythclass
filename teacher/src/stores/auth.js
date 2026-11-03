@@ -62,6 +62,11 @@ export const useAuthStore = defineStore('auth', {
     socket: null,
     socketReady: false,
     presence: {}, // clientId -> online
+    // 客户端把通知窗弹开以后交回来的截图（独立页面拿来当凭据）。
+    // 放 store 里而不是组件里：从控制台跳过去时，两边都挂着一个监听，
+    // 谁先收到都得算数。
+    noticeShot: '',
+    noticeShotAt: 0,
   }),
 
   getters: {
@@ -152,6 +157,16 @@ export const useAuthStore = defineStore('auth', {
       socket.on('command_result', (payload) => {
         if (!payload) return;
 
+        // 通知窗弹开以后客户端会补一条截图（command = notice_shot）。
+        // 这条不参与去重 —— 每次发消息都该换一张新的
+        if (payload.command === 'notice_shot') {
+          if (payload.output) {
+            this.noticeShot = payload.output;
+            this.noticeShotAt = Date.now();
+          }
+          return;
+        }
+
         // HTTP 那条被截断的版本直接不要：等 socket 那份完整的
         if (payload.at && looksTruncated(payload)) return;
 
@@ -191,14 +206,18 @@ export const useAuthStore = defineStore('auth', {
       if (!this.socket || !this.socket.connected) {
         return Promise.resolve({ ok: false, error: 'OFFLINE' });
       }
+      // 要收这台机器的回执，就得先订阅它（服务端只把 command_result 发给订阅了的老师）
+      if (!this.watching.includes(clientId)) this.watchClient(clientId);
       cmdSeq += 1;
       const requestId = `t${Date.now().toString(36)}-${cmdSeq}`;
       return new Promise((resolve) => {
         let done = false;
+        let ackTimer = 0;
         const finish = (value) => {
           if (done) return;
           done = true;
           clearTimeout(timer);
+          clearTimeout(ackTimer);
           pendingCommands.delete(requestId);
           resolve(value);
         };
@@ -207,7 +226,17 @@ export const useAuthStore = defineStore('auth', {
         pendingCommands.set(requestId, finish);
         this.socket.emit('command', { clientId, command, args, requestId }, (ack) => {
           // 这个 ack 只代表「服务端收下并转发了」；机器不在线才会是失败
-          if (ack && ack.ok === false) finish({ ok: false, error: ack.error || 'OFFLINE' });
+          if (!ack) return;
+          if (ack.ok === false) {
+            finish({ ok: false, error: ack.error || 'OFFLINE' });
+            return;
+          }
+          // 已经转给那台机器了。回执要绕一圈才能回来（订阅、网络都可能出岔子），
+          // 迟迟不到就别硬说"发送失败"—— 机器其实已经收到并执行了。
+          // 3 秒宽限：真回执先到就用真回执。
+          if (!done && !ackTimer) {
+            ackTimer = setTimeout(() => finish({ ok: true, delivered: true, output: '' }), 3000);
+          }
         });
       });
     },

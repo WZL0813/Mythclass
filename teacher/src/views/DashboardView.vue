@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import { toast } from '@/utils/toast';
 import { useAuthStore } from '@/stores/auth';
@@ -11,6 +11,7 @@ import { version as appVersion } from '../../package.json';
 import StarBackdrop from '@/components/StarBackdrop.vue';
 
 const router = useRouter();
+const route = useRoute();
 const auth = useAuthStore();
 const ui = useUiStore();
 
@@ -249,6 +250,7 @@ onMounted(async () => {
     },
     onCommandResult: (payload) => {
       if (!payload || payload.clientId !== selectedId.value) return;
+
       commandLog.value.unshift(payload);
       if (commandLog.value.length > 40) commandLog.value.pop();
 
@@ -279,6 +281,15 @@ onMounted(async () => {
 
   // P2P 的 answer 会从这条连接回来
   if (auth.socket) auth.socket.on('answer', onP2PAnswer);
+
+  // 独立页面（/tanxiaoxi）：只干发消息这一件事，进来就把框摊开
+  if (noticeOnly.value) {
+    const wantId = Number(route.query.clientId || 0);
+    const hit = wantId ? clients.value.find((c) => c.id === wantId) : null;
+    if (hit && hit.id !== selectedId.value) selectClient(hit);
+    notice.value.mode = 'page';
+    notice.value.open = true;
+  }
 
   // 断线重连后：房间由 store 补 watch，画面得我们自己再要一次
   if (auth.socket) {
@@ -936,8 +947,16 @@ async function copyText(value) {
  * 选项按位置决定样子（主人定的）：第一个高亮、第二个普通、第三个是输入框；
  * 每个都能单独勾上或关掉。
  */
+const props = defineProps({
+  // only='notice'：整个页面只留「发消息」这一件事（/tanxiaoxi 用）
+  only: { type: String, default: '' },
+});
+const noticeOnly = computed(() => props.only === 'notice');
+
 const notice = ref({
   open: false,
+  // 在哪儿发：本页面的弹框（inline），还是独立页面 /tanxiaoxi（page）
+  mode: 'inline',
   topmost: true,
   fullscreen: false,
   // 窗口大小与字号都能自定义；勾了自适应就按内容算，最多到屏幕的九成
@@ -973,6 +992,47 @@ const notice = ref({
 
 /** 发送中：那台机器还没回话，按钮就转圈、变灰、点不动 */
 const noticeSending = ref(false);
+/** 客户端弹出来以后交回来的截图 + 一句结果说明（独立页面用） */
+const noticeShot = computed(() => auth.noticeShot || '');
+const noticeResult = ref('');
+
+/** 独立页面里换一台机器 */
+function pickTarget(value) {
+  const id = Number(value);
+  const hit = clients.value.find((c) => c.id === id);
+  if (hit) selectClient(hit);
+}
+
+/** 回控制台（独立页面那个按钮） */
+function goDashboard() {
+  router.push({ path: '/dashboard' });
+}
+
+/** 换「在哪儿发」：选独立页面就直接跳过去（同一个标签页） */
+function setNoticeMode(mode) {
+  notice.value.mode = mode;
+  if (mode === 'page' && !noticeOnly.value) {
+    router.push({ path: '/tanxiaoxi', query: { clientId: String(selectedId.value || '') } });
+  } else if (mode === 'inline' && noticeOnly.value) {
+    router.push({ path: '/dashboard' });
+  }
+}
+
+/**
+ * 下拉的默认值容易丢：<select> 先建出来、后插 <option>，
+ * 浏览器那时还没得选，就会变成"什么都没选"（空白）。
+ * 所以框子一打开，再补一次。
+ */
+const modeSelect = ref(null);
+watch(
+  () => notice.value.open,
+  (open) => {
+    if (!open) return;
+    nextTick(() => {
+      if (modeSelect.value) modeSelect.value.value = notice.value.mode;
+    });
+  }
+);
 
 /**
  * 勾选互斥：
@@ -992,9 +1052,11 @@ function pickOption(index) {
 
 function openNotice() {
   if (!selectedId.value) return toast.warning('先选一台机器');
-    loadVoiceOptions();
-notice.value = {
+  loadVoiceOptions();
+  notice.value = {
     open: true,
+    // 记住上次选的「在哪儿发」，默认还是在当前页面
+    mode: notice.value.mode || 'inline',
     topmost: true,
     fullscreen: false,
     soundMode: 'default',
@@ -1241,6 +1303,8 @@ async function sendNotice() {
     .filter(Boolean);
   // 按钮转圈、变灰、点不动 —— 一直到那台机器真的回了话才算发出去
   noticeSending.value = true;
+  auth.noticeShot = '';
+  noticeResult.value = '';
   try {
     const ack = await auth.sendCommand(selectedId.value, 'message', {
       title: n.title.trim() || '老师有话要说',
@@ -1265,12 +1329,15 @@ async function sendNotice() {
       options,
     });
     if (ack && ack.ok) {
-      notice.value.open = false;
+      if (!noticeOnly.value) notice.value.open = false;
+      noticeResult.value = '已经弹到那台机器上了，等它把画面交回来…';
       toast.success('已经弹到那台机器上了');
     } else {
+      noticeResult.value = (ack && ack.output) || '没送到，那台机器可能没在线';
       toast.warning((ack && ack.output) || '没送到，那台机器可能没在线');
     }
   } catch (err) {
+    noticeResult.value = '没送到：' + (err.message || err);
     toast.warning('没送到：' + (err.message || err));
   } finally {
     noticeSending.value = false;
@@ -1952,7 +2019,12 @@ function fmtTime(t) {
 <template>
   <div
     class="dash"
-    :class="{ 'rail-off': !railOpen, 'events-off': !eventsOpen, 'skin-new': ui.newLook }"
+    :class="{
+      'rail-off': !railOpen,
+      'events-off': !eventsOpen,
+      'skin-new': ui.newLook,
+      'only-notice': noticeOnly,
+    }"
   >
     <!-- 背后的星光，和登录过场同一片 -->
     <StarBackdrop />
@@ -1967,10 +2039,40 @@ function fmtTime(t) {
       <iconify-icon :icon="railOpen ? 'ph:caret-left' : 'ph:caret-right'"></iconify-icon>
     </button>
     <!-- 通知编辑框 -->
-    <div v-if="notice.open" class="notice-mask" @click.self="notice.open = false">
+    <div v-if="notice.open" class="notice-mask" @click.self="!noticeOnly && (notice.open = false)">
       <div class="notice-box">
-        <h3>发通知</h3>
-        <p class="muted tiny">窗口标题固定是「Mythclass消息通知」，下面的标题和内容由你写。</p>
+        <h3>{{ noticeOnly ? '发消息' : '发通知' }}</h3>
+        <p class="muted tiny">
+          窗口标题固定是「Mythclass消息通知」，下面的标题和内容由你写。
+        </p>
+
+        <!-- 发给哪台机器（独立页面里必须能选） -->
+        <p class="nt-label">发给哪台机器</p>
+        <select
+          class="nt-input"
+          :value="selectedId || ''"
+          @change="pickTarget($event.target.value)"
+        >
+          <option v-for="c in clients" :key="c.id" :value="String(c.id)">
+            {{ c.name || c.clientUid }}（{{ auth.presence[c.id] ? '在线' : '离线' }}）
+          </option>
+          <option v-if="!clients.length" value="">（还没有绑定机器）</option>
+        </select>
+
+        <!-- 在哪儿发：本页面 / 独立页面 -->
+        <p class="nt-label">在哪儿发</p>
+        <select
+          ref="modeSelect"
+          class="nt-input"
+          :value="notice.mode"
+          @change="setNoticeMode($event.target.value)"
+        >
+          <option value="inline" :selected="notice.mode === 'inline'">本页面发消息</option>
+          <option value="page" :selected="notice.mode === 'page'">独立页面发消息</option>
+        </select>
+        <p class="muted tiny">
+          独立页面只干发消息这一件事，地址是 /tanxiaoxi，在这个标签页打开。
+        </p>
 
         <label class="nt-row">
           <input type="checkbox" v-model="notice.topmost" />
@@ -2099,11 +2201,25 @@ function fmtTime(t) {
         </div>
 
         <div class="nt-actions">
-          <button class="btn gh" :disabled="noticeSending" @click="notice.open = false">取消</button>
+          <button v-if="!noticeOnly" class="btn gh" :disabled="noticeSending" @click="notice.open = false">取消</button>
+          <button v-if="noticeOnly" class="btn gh" @click="goDashboard">回控制台</button>
           <button class="btn pm" :class="{ sending: noticeSending }" :disabled="noticeSending" @click="sendNotice">
             <iconify-icon v-if="noticeSending" icon="ph:circle-notch" class="spin"></iconify-icon>
             {{ noticeSending ? '发送中…' : '发出去' }}
           </button>
+        </div>
+
+        <!-- 它那边到底弹出来没有：让那台机器自己交一张截图回来 -->
+        <div v-if="noticeOnly" class="nt-shot">
+          <p class="nt-label">它那边现在的样子</p>
+          <p v-if="noticeSending" class="muted tiny">等那台机器回话…</p>
+          <p v-else-if="!noticeShot" class="muted tiny">
+            {{ noticeResult || '发一条消息，它弹出来以后会把画面交回来。' }}
+          </p>
+          <template v-else>
+            <p class="muted tiny">{{ noticeResult || '已经弹出来了，这是它交回来的画面。' }}</p>
+            <img :src="noticeShot" alt="客户端弹出后的画面" class="nt-shot-img" />
+          </template>
         </div>
       </div>
     </div>
@@ -2817,6 +2933,39 @@ function fmtTime(t) {
   background: rgba(15, 22, 19, 0.6); font-size: 12.5px; word-break: break-all;
 }
 .nt-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+/* 独立页面（/tanxiaoxi）：只留发消息这一件事 */
+.dash.only-notice > .rail,
+.dash.only-notice > .work,
+.dash.only-notice > .events,
+.dash.only-notice > .edge-toggle,
+.dash.only-notice > .top-bar { display: none; }
+.dash.only-notice .notice-mask {
+  position: relative;
+  inset: auto;
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  background: none;
+  padding: 34px 16px 70px;
+  overflow: auto;
+}
+.dash.only-notice .notice-box {
+  width: min(820px, 100%);
+  max-height: none;
+  margin: 0 auto;
+}
+.nt-shot { margin-top: 18px; }
+.nt-shot-img {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid rgba(143, 168, 142, 0.3);
+  border-radius: 14px;
+  background: rgba(8, 12, 9, 0.7);
+}
 .btn.gh { background: transparent; border: 1px solid var(--line); color: var(--sage); }
 .btn.pm { background: #3f6b52; border: 1px solid #4c7d61; color: #f1f6ef; }
 .btn.pm:disabled,
@@ -3313,6 +3462,11 @@ th { color: var(--sage); font-weight: 500; font-size: 12.4px; }
   background: linear-gradient(180deg, rgba(63, 107, 82, 0.18), transparent 92%);
 }
 .dash.skin-new .rail-head { flex: 0 0 auto; }
+/*
+ * 收起机器带的时候，整条带（横排这一行）留着就是一条白边。
+ * 新界面里它是一整行，不是左边一列 —— 直接不占位，下面的工作区顶上去。
+ */
+.dash.skin-new.rail-off .rail { display: none; }
 .dash.skin-new .rail-sum { order: 3; margin: 0 0 0 auto; flex: 0 0 auto; }
 .dash.skin-new .client-grid {
   order: 2;
